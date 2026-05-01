@@ -139,23 +139,6 @@
     return String(capture.index ?? 'unknown');
   };
 
-  const byteToJsIndexMap = (str) => {
-    const encoder = new TextEncoder();
-    const map = [];
-    let byte = 0;
-    for (let i = 0; i < str.length;) {
-      map[byte] = i;
-      const cp = str.codePointAt(i);
-      const ch = String.fromCodePoint(cp);
-      const len = encoder.encode(ch).length;
-      for (let j = 1; j < len; j++) map[byte + j] = i;
-      byte += len;
-      i += ch.length;
-    }
-    map[byte] = str.length;
-    return map;
-  };
-
   const normalizeRanges = (captures, query, source) => {
     const ranges = captures.map((capture) => {
       const node = capture.node;
@@ -176,24 +159,26 @@
   };
 
   const renderRanges = (codeEl, source, ranges) => {
-    const byteMap = byteToJsIndexMap(source);
     const frag = document.createDocumentFragment();
     let cursor = 0;
 
-    const appendText = (startByte, endByte) => {
-      if (endByte <= startByte) return;
-      frag.appendChild(document.createTextNode(source.slice(byteMap[startByte], byteMap[endByte])));
+    // web-tree-sitter's JS binding feeds source through UTF-16, so
+    // node.startIndex/node.endIndex are JS string indices, not UTF-8 byte
+    // offsets.  Using byte offsets here shifts spans after CJK/emoji text.
+    const appendText = (start, end) => {
+      if (end <= start) return;
+      frag.appendChild(document.createTextNode(source.slice(start, end)));
     };
 
     for (const range of ranges) {
       appendText(cursor, range.start);
       const span = document.createElement('span');
       span.className = escapeCapture(range.capture);
-      span.textContent = source.slice(byteMap[range.start], byteMap[range.end]);
+      span.textContent = source.slice(range.start, range.end);
       frag.appendChild(span);
       cursor = range.end;
     }
-    appendText(cursor, byteMap.length - 1);
+    appendText(cursor, source.length);
 
     codeEl.replaceChildren(frag);
     codeEl.dataset.loamTreesitterDone = 'true';
