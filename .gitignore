@@ -2,6 +2,7 @@ build/
 .cpcache/
 .lsp/.cache/
 .shadow-cljs/
+.clj-kondo/
 target/
 node_modules/
 public/assets/manifest.edn
