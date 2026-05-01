@@ -14,11 +14,13 @@
 (def usage
   (str "Usage:\n"
        "  bb build --edn-dir build/edn --output-dir build/site\n"
+       "  bb build --config loam.edn\n"
        "  npm run build -- --edn-dir build/edn --output-dir build/site\n\n"
        "Required:\n"
        "  --edn-dir DIR      EDN document directory\n"
        "  --output-dir DIR   Static site output directory\n\n"
        "Optional:\n"
+       "  --config FILE     EDN build config file; CLI args override file values\n"
        "  --url-prefix URL   Document URL prefix, default /notes/\n"
        "  --public-dir DIR   Static asset directory, default public\n"
        "  --site-title TEXT  Default theme title"))
@@ -90,6 +92,42 @@
   (write-file! (.getPath (io/file output-dir "graph.json"))
                (json/render-json (:graph idx))))
 
+(def config-path-keys #{:edn-dir :output-dir :public-dir})
+
+(defn relative-path-string? [path]
+  (and (string? path)
+       (not (.isAbsolute (io/file path)))))
+
+(defn resolve-config-paths [config-file opts]
+  (let [base-dir (or (.getParentFile (io/file config-file))
+                     (io/file "."))]
+    (reduce-kv (fn [resolved k v]
+                 (assoc resolved k
+                        (if (and (contains? config-path-keys k)
+                                 (relative-path-string? v))
+                          (.getPath (io/file base-dir v))
+                          v)))
+               {}
+               opts)))
+
+(defn read-config-file [config-file]
+  (let [file (io/file config-file)]
+    (when-not (.exists file)
+      (throw (ex-info "Loam config file does not exist"
+                      {:config-file config-file
+                       :usage usage})))
+    (when-not (.isFile file)
+      (throw (ex-info "Loam config path is not a file"
+                      {:config-file config-file
+                       :usage usage})))
+    (let [config (edn/read-string (slurp file))]
+      (when-not (map? config)
+        (throw (ex-info "Loam config file must contain an EDN map"
+                        {:config-file config-file
+                         :value config
+                         :usage usage})))
+      (resolve-config-paths config-file config))))
+
 (defn validate-build-opts! [opts]
   (let [missing (vec (remove #(seq (str (get opts %))) [:edn-dir :output-dir]))]
     (when (seq missing)
@@ -143,7 +181,7 @@
 (defn normalize-args [args]
   (remove #{"--"} args))
 
-(defn parse-args [args]
+(defn parse-cli-args [args]
   (loop [args (seq (normalize-args args))
          opts {}]
     (if (empty? args)
@@ -159,6 +197,14 @@
                            :usage usage})))
         (recur rest (assoc opts (keyword (subs k 2)) v))))))
 
+(defn parse-args [args]
+  (let [cli-opts (parse-cli-args args)
+        config-file (:config cli-opts)
+        config-opts (if config-file
+                      (read-config-file config-file)
+                      {})]
+    (merge config-opts (dissoc cli-opts :config))))
+
 (defn help? [args]
   (some #{"--help" "-h"} (normalize-args args)))
 
@@ -172,6 +218,8 @@
         (println "Argument:" argument))
       (when-let [edn-dir (:edn-dir data)]
         (println "EDN dir:" edn-dir))
+      (when-let [config-file (:config-file data)]
+        (println "Config file:" config-file))
       (when-let [usage (:usage data)]
         (println)
         (println usage)))))

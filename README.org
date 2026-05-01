@@ -38,6 +38,13 @@ npm run build -- \
   --url-prefix /notes/
 #+end_src
 
+也可以用配置文件：
+
+#+begin_src bash
+cp loam.edn.example loam.edn
+bb build --config loam.edn
+#+end_src
+
 本地预览：
 
 #+begin_src bash
@@ -69,6 +76,7 @@ npm run serve
 | =npm run cljs:release= | =client:release= 的兼容别名 |
 | =npm run prepare-assets= | 编译浏览器端客户端；默认 Shiki 不需要 Tree-sitter 资产 |
 | =npm run build -- ...= | 准备资产并调用 =bb build= 构建站点 |
+| =bb build --config loam.edn= | 从 EDN 配置文件构建；命令行参数覆盖配置文件 |
 | =npm run serve= | 用 Python HTTP server 预览 =build/site= |
 | =bb build ...= | 只运行 Loam 静态构建；调用前需要自行准备资产 |
 
@@ -501,7 +509,7 @@ globalThis.dispatchEvent(new CustomEvent("loam:tree-sitter-runtime", {detail: ru
                       :query "/assets/tree-sitter/queries/rust/highlights.scm"}}}})
 #+end_src
 
-替换或新增 grammar 时，要保证 =web-tree-sitter= runtime 和语言 WASM 的 ABI 版本兼容。Loam 的默认方案是修改 =guix/loam-tree-sitter-assets.scm= 和 =guix/loam/build-tree-sitter-assets.scm=，用固定 commit/hash 生成新的资产输出，然后运行：
+替换或新增 grammar 时，要保证 =web-tree-sitter= runtime 和语言 WASM 的 ABI 版本兼容。Loam 的默认方案是修改 =guix/loam/tree-sitter-grammars.scm= 这一份 registry，用固定 repo/commit/hash 描述 grammar；Guix package 和资产 builder 都读取它，然后运行：
 
 #+begin_src bash
 guix build -f guix/loam-tree-sitter-assets.scm
@@ -602,6 +610,36 @@ Indexer 接收当前 index 和 documents，返回新的 index。
 
 默认主题提供 =:home= 和 =:page= 两个 layout。如果只替换 =:page=，首页仍然可以使用默认布局。
 
+* 配置文件
+
+Loam 支持 EDN 构建配置文件。示例见 =loam.edn.example=：
+
+#+begin_src clojure
+{:edn-dir "build/edn"
+ :output-dir "build/site"
+ :url-prefix "/notes/"
+ :public-dir "public"
+ :site-title "Loam"
+ :highlight {:provider :shiki
+             :theme "github-dark"
+             :languages ["clojure" "javascript" "typescript" "python"]}}
+#+end_src
+
+运行：
+
+#+begin_src bash
+bb build --config loam.edn
+npm run build -- --config loam.edn
+#+end_src
+
+配置文件里的相对路径（=:edn-dir=、=:output-dir=、=:public-dir=）会按配置文件所在目录解析。命令行参数会覆盖配置文件值：
+
+#+begin_src bash
+bb build --config loam.edn --output-dir /tmp/site
+#+end_src
+
+注意：EDN 配置适合声明普通数据，例如路径、标题、=:highlight= provider 配置。需要函数值的自定义 extension 仍应在 Clojure 代码里组合 system，而不是塞进 EDN 文件。
+
 * 直接调用构建 API
 
 除了 CLI，也可以在 Clojure 中直接调用：
@@ -627,7 +665,7 @@ Indexer 接收当前 index 和 documents，返回新的 index。
 | =:public-dir= | ="public"= | 用户静态资产目录 |
 | =:site-title= | ="Loam"= | 默认主题显示的网站标题 |
 | =:highlight= | =:shiki= | 高亮 provider；可选 =:treesitter=、=:shiki=、=:none=、provider 配置 map 或高亮 extension map |
-| =:extensions= | =nil= | 追加安装的 extension |
+| =:extensions= | =nil= | 追加安装的 extension；EDN 配置中通常不写函数型 extension |
 
 * 排障
 

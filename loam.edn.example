@@ -1,0 +1,14 @@
+;; Example Loam build config.
+;; Use with: bb build --config loam.edn
+;; Relative paths are resolved from the config file directory.
+
+{:edn-dir "build/edn"
+ :output-dir "build/site"
+ :url-prefix "/notes/"
+ :public-dir "public"
+ :site-title "Loam"
+
+ ;; Default is :shiki. Use :none to disable built-in highlighting.
+ :highlight {:provider :shiki
+             :theme "github-dark"
+             :languages ["clojure" "javascript" "typescript" "python"]}}

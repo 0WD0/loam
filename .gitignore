@@ -5,6 +5,7 @@ build/
 .clj-kondo/
 target/
 node_modules/
+loam.edn
 public/assets/manifest.edn
 public/assets/tree-sitter/
 public/assets/loam-client.js*

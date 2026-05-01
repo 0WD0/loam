@@ -1,0 +1,34 @@
+;; Tree-sitter/WASM Loam build config.
+;; Use with:
+;;   cp loam.treesitter.edn.example loam.edn
+;;   npm run copy-tree-sitter-assets
+;;   npm run smoke-tree-sitter-assets
+;;   npm run client:release
+;;   bb build --config loam.edn
+;;
+;; Relative paths are resolved from this config file directory.
+
+{:edn-dir "build/edn"
+ :output-dir "build/site"
+ :url-prefix "/notes/"
+ :public-dir "public"
+ :site-title "Loam"
+
+ :highlight
+ {:provider :treesitter
+  :languages
+  {:clojure {:aliases ["clj" "cljs" "cljc" "edn"]
+             :wasm "/assets/tree-sitter/languages/tree-sitter-clojure.wasm"
+             :query "/assets/tree-sitter/queries/clojure/highlights.scm"}
+   :javascript {:aliases ["js" "jsx" "node"]
+                :wasm "/assets/tree-sitter/languages/tree-sitter-javascript.wasm"
+                :query "/assets/tree-sitter/queries/javascript/highlights.scm"}
+   :typescript {:aliases ["ts"]
+                :wasm "/assets/tree-sitter/languages/tree-sitter-typescript.wasm"
+                :query "/assets/tree-sitter/queries/typescript/highlights.scm"}
+   :python {:aliases ["py"]
+            :wasm "/assets/tree-sitter/languages/tree-sitter-python.wasm"
+            :query "/assets/tree-sitter/queries/python/highlights.scm"}
+   :scala {:aliases ["sc"]
+           :wasm "/assets/tree-sitter/languages/tree-sitter-scala.wasm"
+           :query "/assets/tree-sitter/queries/scala/highlights.scm"}}}}

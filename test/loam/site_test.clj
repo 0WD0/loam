@@ -38,6 +38,22 @@
           :output-dir "build/site"}
          (site/parse-args ["--" "--edn-dir" "build/edn" "--output-dir" "build/site"]))))
 
+(deftest parses-config-file-and-cli-overrides
+  (let [root (temp-dir)
+        config-file (io/file root "loam.edn")]
+    (spit config-file (pr-str {:edn-dir "edn"
+                               :output-dir "site"
+                               :public-dir "public"
+                               :site-title "Configured Loam"
+                               :highlight {:provider :shiki}}))
+    (is (= {:edn-dir (.getPath (io/file root "edn"))
+            :output-dir "override-site"
+            :public-dir (.getPath (io/file root "public"))
+            :site-title "Configured Loam"
+            :highlight {:provider :shiki}}
+           (site/parse-args ["--config" (.getPath config-file)
+                             "--output-dir" "override-site"])))))
+
 (deftest builds-static-site-from-edn-files
   (let [root (temp-dir)
         edn-dir (io/file root "edn")
