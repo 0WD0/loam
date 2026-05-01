@@ -1,6 +1,7 @@
 (ns loam.defaults
   "Default Loam system composition."
   (:require [loam.core :as core]
+            [loam.directory :as directory]
             [loam.graph :as graph]
             [loam.highlight.shiki :as shiki]
             [loam.highlight.treesitter.wasm :as treesitter.wasm]
@@ -61,6 +62,7 @@
              (when highlight [highlight])
              [search/extension
               graph/extension
+              directory/extension
               theme.default/extension]
              user-extensions))))
 

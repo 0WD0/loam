@@ -3,6 +3,7 @@
             [loam.anchor-test]
             [loam.core-test]
             [loam.defaults-test]
+            [loam.directory-test]
             [loam.graph-test]
             [loam.head-test]
             [loam.html-test]
@@ -17,6 +18,7 @@
   (let [result (test/run-tests 'loam.anchor-test
                                'loam.core-test
                                'loam.defaults-test
+                               'loam.directory-test
                                'loam.graph-test
                                'loam.head-test
                                'loam.html-test

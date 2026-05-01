@@ -48,6 +48,7 @@
       (is (str/includes? page-a "../../assets/site.css"))
       (is (str/includes? page-a "../../search-index.json"))
       (is (= "/notes/b" (get-in public-index [:ids "page-b" :href])))
+      (is (= ["notes" "daily"] (map :path (:directories public-index))))
       (is (= 2 (count (:search/documents public-index))))
       (is (= 2 (count (:nodes graph))))
       (is (str/includes? search-json "Page A")))))

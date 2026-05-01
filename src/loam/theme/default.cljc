@@ -21,12 +21,9 @@
   "(() => {\n  const script = document.currentScript;\n  const indexUrl = script?.dataset?.index || '/search-index.json';\n  const input = document.querySelector('[data-loam-search]');\n  const results = document.querySelector('[data-loam-search-results]');\n  if (!input || !results) return;\n  let docs = [];\n  const normalize = (s) => (s || '').toLowerCase();\n  const render = (items, q) => {\n    results.innerHTML = '';\n    if (!q) return;\n    if (!items.length) {\n      const li = document.createElement('li');\n      li.className = 'search-empty';\n      li.textContent = 'No results';\n      results.appendChild(li);\n      return;\n    }\n    for (const doc of items.slice(0, 12)) {\n      const li = document.createElement('li');\n      const a = document.createElement('a');\n      a.href = doc.url;\n      a.textContent = doc.title || doc.url;\n      const small = document.createElement('small');\n      const text = doc.text || '';\n      const i = normalize(text).indexOf(q);\n      small.textContent = i >= 0 ? text.slice(Math.max(0, i - 50), i + 120) : (doc.url || '');\n      li.appendChild(a);\n      li.appendChild(small);\n      results.appendChild(li);\n    }\n  };\n  fetch(indexUrl).then(r => r.json()).then(data => { docs = data.documents || []; }).catch(() => {});\n  input.addEventListener('input', () => {\n    const q = normalize(input.value).trim();\n    if (!q) { render([], q); return; }\n    const terms = q.split(/\\s+/).filter(Boolean);\n    const scored = [];\n    for (const doc of docs) {\n      const haystack = normalize(`${doc.title || ''} ${doc.url || ''} ${doc.text || ''}`);\n      if (terms.every(t => haystack.includes(t))) {\n        const title = normalize(doc.title || '');\n        const score = terms.reduce((n, t) => n + (title.includes(t) ? 10 : 1), 0);\n        scored.push([score, doc]);\n      }\n    }\n    scored.sort((a, b) => b[0] - a[0]);\n    render(scored.map(x => x[1]), q);\n  });\n})();\n")
 
 (defn page-groups [ctx]
-  (->> (vals (get-in ctx [:index :pages]))
-       (group-by #(or (:source-dir %) "notes"))
-       (map (fn [[group pages]]
-              {:group group
-               :pages (sort-by :page-title pages)}))
-       (sort-by (fn [{:keys [group]}] [(if (= group "notes") 0 1) group]))))
+  (for [{:keys [path pages]} (get-in ctx [:index :directories])]
+    {:group path
+     :pages pages}))
 
 (defn search-box [ctx current-url]
   [:div.search-box

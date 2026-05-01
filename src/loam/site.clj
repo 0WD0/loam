@@ -55,7 +55,7 @@
           (copy-file! file (.getPath (io/file output-dir rel))))))))
 
 (defn public-index [idx]
-  (select-keys idx [:pages :ids :custom-ids :titles :targets :links :backlinks :search/documents :graph]))
+  (select-keys idx [:pages :directories :ids :custom-ids :titles :targets :links :backlinks :search/documents :graph]))
 
 (defn search-index [idx]
   {:documents (:search/documents idx)})
