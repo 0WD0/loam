@@ -69,7 +69,7 @@ npm run serve
 | =npm run prepare-assets= | 同步 npm 资源并编译浏览器端客户端 |
 | =npm run build -- ...= | 准备资产并调用 =bb build= 构建站点 |
 | =npm run serve= | 用 Python HTTP server 预览 =build/site= |
-| =bb build -- ...= | 只运行 Loam 静态构建；调用前需要自行准备资产 |
+| =bb build ...= | 只运行 Loam 静态构建；调用前需要自行准备资产 |
 
 * 数据流
 

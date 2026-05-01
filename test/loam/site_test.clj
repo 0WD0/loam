@@ -16,6 +16,28 @@
     (.mkdirs (.getParentFile file))
     (spit file (pr-str value))))
 
+(deftest validates-required-build-options
+  (try
+    (site/build-site! {})
+    (is false "Expected missing build option error")
+    (catch clojure.lang.ExceptionInfo error
+      (is (= "Missing required Loam build option" (ex-message error)))
+      (is (= [:edn-dir :output-dir] (:missing (ex-data error)))))))
+
+(deftest validates-edn-directory
+  (try
+    (site/build-site! {:edn-dir "/tmp/loam-missing-edn-dir"
+                       :output-dir "/tmp/loam-missing-edn-out"})
+    (is false "Expected missing EDN directory error")
+    (catch clojure.lang.ExceptionInfo error
+      (is (= "EDN directory does not exist or is not a directory" (ex-message error)))
+      (is (= "/tmp/loam-missing-edn-dir" (:edn-dir (ex-data error)))))))
+
+(deftest parses-bb-argument-separator
+  (is (= {:edn-dir "build/edn"
+          :output-dir "build/site"}
+         (site/parse-args ["--" "--edn-dir" "build/edn" "--output-dir" "build/site"]))))
+
 (deftest builds-static-site-from-edn-files
   (let [root (temp-dir)
         edn-dir (io/file root "edn")

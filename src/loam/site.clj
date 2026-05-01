@@ -11,11 +11,27 @@
             [loam.json :as json]
             [loam.route :as route]))
 
+(def usage
+  (str "Usage:\n"
+       "  bb build --edn-dir build/edn --output-dir build/site\n"
+       "  npm run build -- --edn-dir build/edn --output-dir build/site\n\n"
+       "Required:\n"
+       "  --edn-dir DIR      EDN document directory\n"
+       "  --output-dir DIR   Static site output directory\n\n"
+       "Optional:\n"
+       "  --url-prefix URL   Document URL prefix, default /notes/\n"
+       "  --public-dir DIR   Static asset directory, default public\n"
+       "  --site-title TEXT  Default theme title"))
+
 (defn edn-files [dir]
-  (->> (file-seq (io/file dir))
-       (filter #(.isFile %))
-       (filter #(str/ends-with? (.getName %) ".edn"))
-       (sort-by #(.getPath %))))
+  (let [dir-file (io/file dir)]
+    (when-not (and dir (.exists dir-file) (.isDirectory dir-file))
+      (throw (ex-info "EDN directory does not exist or is not a directory"
+                      {:edn-dir dir})))
+    (->> (file-seq dir-file)
+         (filter #(.isFile %))
+         (filter #(str/ends-with? (.getName %) ".edn"))
+         (sort-by #(.getPath %)))))
 
 (defn relative-path [root file]
   (-> (.toPath (io/file root))
@@ -74,6 +90,14 @@
   (write-file! (.getPath (io/file output-dir "graph.json"))
                (json/render-json (:graph idx))))
 
+(defn validate-build-opts! [opts]
+  (let [missing (vec (remove #(seq (str (get opts %))) [:edn-dir :output-dir]))]
+    (when (seq missing)
+      (throw (ex-info "Missing required Loam build option"
+                      {:missing missing
+                       :usage usage}))))
+  opts)
+
 (defn build-site!
   "Build a static site.
 
@@ -88,6 +112,7 @@
   - :highlight default :treesitter
   - :extensions extension maps"
   [opts]
+  (validate-build-opts! opts)
   (let [edn-dir (:edn-dir opts)
         output-dir (:output-dir opts)
         public-dir (or (:public-dir opts) "public")
@@ -115,14 +140,48 @@
                                         :links (count (:links idx))
                                         :backlink-groups (count (:backlinks idx))})))
 
+(defn normalize-args [args]
+  (remove #{"--"} args))
+
 (defn parse-args [args]
-  (loop [args args
+  (loop [args (seq (normalize-args args))
          opts {}]
     (if (empty? args)
       opts
       (let [[k v & rest] args]
+        (when-not (and (string? k) (str/starts-with? k "--"))
+          (throw (ex-info "Invalid Loam build argument"
+                          {:argument k
+                           :usage usage})))
+        (when (or (nil? v) (str/starts-with? v "--"))
+          (throw (ex-info "Missing value for Loam build argument"
+                          {:argument k
+                           :usage usage})))
         (recur rest (assoc opts (keyword (subs k 2)) v))))))
 
+(defn help? [args]
+  (some #{"--help" "-h"} (normalize-args args)))
+
+(defn print-error! [error]
+  (binding [*out* *err*]
+    (println (ex-message error))
+    (when-let [data (ex-data error)]
+      (when-let [missing (:missing data)]
+        (println "Missing:" (str/join ", " (map name missing))))
+      (when-let [argument (:argument data)]
+        (println "Argument:" argument))
+      (when-let [edn-dir (:edn-dir data)]
+        (println "EDN dir:" edn-dir))
+      (when-let [usage (:usage data)]
+        (println)
+        (println usage)))))
+
 (defn -main [& args]
-  (let [summary (build-site! (parse-args args))]
-    (println "Built site" (select-keys summary [:edn-files :pages :links :backlink-groups :output-dir]))))
+  (if (help? args)
+    (println usage)
+    (try
+      (let [summary (build-site! (parse-args args))]
+        (println "Built site" (select-keys summary [:edn-files :pages :links :backlink-groups :output-dir])))
+      (catch clojure.lang.ExceptionInfo error
+        (print-error! error)
+        (System/exit 1)))))
