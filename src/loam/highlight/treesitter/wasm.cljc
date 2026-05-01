@@ -5,9 +5,8 @@
   changes presentation: src blocks are rendered with data attributes, and a
   shadow-cljs-built browser asset loads web-tree-sitter plus language WASM
   and query files to turn code text into semantic spans."
-  (:require [clojure.string :as str]
-            [loam.ast :as ast]
-            [loam.head :as head]
+  (:require [loam.head :as head]
+            [loam.highlight.core :as highlight]
             [loam.json :as json]))
 
 (def default-languages
@@ -31,27 +30,10 @@
             :wasm "/assets/tree-sitter/languages/tree-sitter-python.wasm"
             :query "/assets/tree-sitter/queries/python/highlights.scm"}})
 
-(defn normalize-language [lang]
-  (let [lang (some-> lang str str/lower-case (str/replace #"^src-" ""))]
-    (case lang
-      nil "text"
-      "" "text"
-      "elisp" "emacs-lisp"
-      "emacs-lisp" "emacs-lisp"
-      "sh" "bash"
-      "shell" "bash"
-      "zsh" "bash"
-      lang)))
-
-(defn render-src-block [_ctx node]
-  (let [p (ast/props node)
-        lang (normalize-language (:language p))
-        code (or (:value p) "")]
-    [[:pre.loam-src.loam-ts-src {:data-language lang}
-      [:code {:class (str "language-" lang)
-              :data-loam-treesitter true
-              :data-language lang}
-       code]]]))
+(def render-src-block
+  (highlight/render-src-block
+   {:pre-class "loam-ts-src"
+    :code-attrs {:data-loam-treesitter true}}))
 
 (def css
   (str

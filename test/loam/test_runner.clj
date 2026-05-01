@@ -8,6 +8,7 @@
             [loam.index-test]
             [loam.json-test]
             [loam.render-test]
+            [loam.shiki-test]
             [loam.site-test]
             [loam.treesitter-wasm-test]))
 
@@ -20,6 +21,7 @@
                                'loam.index-test
                                'loam.json-test
                                'loam.render-test
+                               'loam.shiki-test
                                'loam.site-test
                                'loam.treesitter-wasm-test)]
     (when (pos? (+ (:fail result) (:error result)))

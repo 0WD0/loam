@@ -17,6 +17,7 @@
   "dependencies": {
     "@vscode/tree-sitter-wasm": "0.3.1",
     "@yogthos/tree-sitter-clojure": "0.0.14",
+    "shiki": "^4.0.2",
     "tree-sitter-javascript": "0.25.0",
     "tree-sitter-python": "0.25.0",
     "tree-sitter-typescript": "0.23.2",

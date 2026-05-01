@@ -12,10 +12,11 @@
               :properties {:language "cljs"
                            :value "(defn foo [] :ok)"}}]
     (is (= [:div.loam-document
-            [:pre.loam-src.loam-ts-src {:data-language "cljs"}
+            [:pre {:class "loam-src loam-ts-src"
+                   :data-language "cljs"}
              [:code {:class "language-cljs"
-                     :data-loam-treesitter true
-                     :data-language "cljs"}
+                     :data-language "cljs"
+                     :data-loam-treesitter true}
               "(defn foo [] :ok)"]]]
            (render/render-document system node)))))
 

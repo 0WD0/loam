@@ -166,6 +166,7 @@ Loam 被拆成小的、可替换的层：
 | =loam.head= | extension 注入 =<head>= 的辅助函数 |
 | =loam.theme.default= | 默认布局、分组侧边栏、搜索 UI、主题 CSS/JS |
 | =loam.highlight.treesitter.wasm= | src block Tree-sitter WASM 高亮扩展 |
+| =loam.highlight.shiki= | src block Shiki 高亮扩展 |
 | =loam.client= | Loam 浏览器端客户端入口，使用 =shadow-cljs= 编译 |
 | =loam.highlight.treesitter.client= | Tree-sitter 高亮客户端模块，由 =loam.client= 引入 |
 | =loam.site= | 静态站点构建器和 CLI 入口 |
@@ -251,11 +252,13 @@ src/loam/client.cljs
 public/assets/loam-client.js
 #+end_example
 
-Tree-sitter 高亮只是被 =loam.client= 引入的一个客户端模块：
+Tree-sitter 高亮是被 =loam.client= 引入的一个客户端模块：
 
 #+begin_example
 src/loam/highlight/treesitter/client.cljs
 #+end_example
+
+Shiki 高亮则使用 extension 生成的独立 ESM loader，因此不用把较大的主题/语言 runtime 强行打进 =loam-client.js=。
 
 未来如果新增前端扩展，例如 Graph 交互、全文搜索 UI、代码复制按钮、图片灯箱、脚注 hover preview，可以把对应 CLJS namespace 加到 =loam.client=，并在该 namespace 中直接使用 npm 包：
 
@@ -350,6 +353,39 @@ globalThis.dispatchEvent(new CustomEvent("loam:tree-sitter-runtime", {detail: ru
 #+end_src
 
 替换或新增 grammar 时，要保证 =web-tree-sitter= runtime 和语言 WASM 的 ABI 版本兼容。
+
+* Shiki 高亮
+
+Shiki 是另一种高亮提供方案。它基于 TextMate grammar 和主题，更偏展示效果，适合更强调主题一致性的场景。
+
+如果你想启用 Shiki，可以把它作为一个独立 extension 安装到 system 里：
+
+#+begin_src clojure
+(require '[loam.defaults :as loam]
+         '[loam.highlight.shiki :as shiki])
+
+(def system
+  (loam/create-system
+   {:extensions
+    [(shiki/extension
+      {:theme "github-dark"
+       :languages ["clojure" "javascript" "typescript" "python"]})]}))
+#+end_src
+
+Shiki 扩展会：
+
+- 覆盖 =:src-block= 渲染，添加 =data-loam-shiki= 标记
+- 写入 =assets/loam-shiki.css=
+- 写入 =assets/loam-shiki.js=
+- 通过 =:head= 注入 CSS 和 Shiki 客户端脚本
+
+Shiki 客户端当前默认从 ESM import specifier 加载：
+
+#+begin_example
+https://esm.sh/shiki@4.0.2
+#+end_example
+
+这样做的好处是简单、可切换、易于和 npm 生态对接。以后如果你想改成完全本地化 bundle，只需要把 =:import= 指向本地 ESM 文件，或者再加一层构建脚本把 Shiki 打包到 =public/=。
 
 * 示例：覆盖段落渲染
 
