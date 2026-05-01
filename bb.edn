@@ -1,0 +1,6 @@
+{:paths ["src" "test"]
+ :tasks
+ {test {:doc "Run all tests"
+        :task (exec 'loam.test-runner/-main)}
+  build {:doc "Build a static site from EDN files"
+         :task (apply clojure "-M -m loam.site" *command-line-args*)}}}

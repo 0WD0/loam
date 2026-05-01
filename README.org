@@ -1,0 +1,116 @@
+#+title: Loam
+
+Loam is an EDN-native web framework for semantic Org knowledge bases.
+
+It consumes structured EDN documents, usually produced by =ox-edn=, and turns them into indexed, link-aware, extensible web experiences.
+
+* Design goals
+
+- EDN-native: no Markdown conversion layer
+- Data-first: every stage is inspectable Clojure data
+- Extensible: renderers, indexers, layouts, hooks, and assets are replaceable
+- Static-first: works without a server, but does not prevent interactive CLJS frontends
+- Org-aware: preserves IDs, custom IDs, targets, radio targets, fuzzy links, backlinks
+
+* Quick start
+
+#+begin_src bash
+npm install
+bb test
+
+bb -cp src -m loam.site \
+  --edn-dir /path/to/edn \
+  --output-dir build/site \
+  --url-prefix /notes/
+#+end_src
+
+Or with Make:
+
+#+begin_src bash
+make site EDN_DIR=/path/to/edn SITE_DIR=build/site
+make serve
+#+end_src
+
+* Architecture
+
+Loam is split into small replaceable layers:
+
+| Namespace | Responsibility |
+|-----------+----------------|
+| =loam.core= | System map, extension installation, hooks |
+| =loam.ast= | AST traversal, title/text extraction, source helpers |
+| =loam.index= | IDs, custom IDs, targets, links, backlinks, URL resolution |
+| =loam.render= | Registry-based AST -> Hiccup rendering |
+| =loam.html= | Minimal Hiccup -> HTML serialization |
+| =loam.theme.default= | Default layouts and CSS |
+| =loam.search= | Search index extension |
+| =loam.site= | Static site builder / CLI |
+
+The important design choice: rendering is not a giant closed =case= owned by the framework. It is a registry in the system map:
+
+#+begin_src clojure
+(:renderers system)
+;; => {:paragraph fn, :headline fn, :link fn, ...}
+#+end_src
+
+Extensions can override one node type without forking the renderer.
+
+* Extension shape
+
+Extensions are plain maps:
+
+#+begin_src clojure
+{:id :my/theme
+ :renderers {:paragraph (fn [ctx node] ...)}
+ :inline-types #{:my-inline-node}
+ :indexers [(fn [index documents] ...)]
+ :layouts {:page (fn [ctx document] ...)}
+ :assets {"assets/theme.css" "body { ... }"}
+ :hooks {:site/built [(fn [event] event)]}}
+#+end_src
+
+Install them with =loam.core/create-system= or =loam.defaults/create-system=:
+
+#+begin_src clojure
+(require '[loam.defaults :as loam])
+
+(def system
+  (loam/create-system {:extensions [my-extension]}))
+#+end_src
+
+* Examples
+
+Override paragraph rendering:
+
+#+begin_src clojure
+(def paragraph-extension
+  {:id :example/paragraph
+   :renderers
+   {:paragraph (fn [ctx node]
+                 [[:p.lead (loam.render/text-content node)]])}})
+#+end_src
+
+Add an index section:
+
+#+begin_src clojure
+(def word-count-extension
+  {:id :example/word-count
+   :indexers
+   [(fn [idx documents]
+      (assoc idx :word-count
+             (reduce + (map #(count (re-seq #"\\S+" (loam.ast/text (:ast %))))
+                            documents))))]})
+#+end_src
+
+Replace the page layout:
+
+#+begin_src clojure
+(def layout-extension
+  {:id :example/layout
+   :layouts
+   {:page (fn [ctx document]
+            [:html
+             [:body
+              [:main
+               (loam.render/render-document ctx (:ast document))]]])}})
+#+end_src
