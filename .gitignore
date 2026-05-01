@@ -1,6 +1,9 @@
 build/
 .cpcache/
 .lsp/.cache/
+.shadow-cljs/
 target/
 node_modules/
+public/assets/manifest.edn
 public/assets/tree-sitter/
+public/assets/treesitter.js*

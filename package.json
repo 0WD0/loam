@@ -4,10 +4,14 @@
   "private": true,
   "packageManager": "npm@11.12.1",
   "scripts": {
-    "prepare-assets": "node scripts/copy-tree-sitter-assets.mjs",
-    "postinstall": "npm run prepare-assets",
+    "copy-tree-sitter-assets": "node scripts/copy-tree-sitter-assets.mjs",
+    "cljs:release": "shadow-cljs release treesitter",
+    "prepare-assets": "npm run copy-tree-sitter-assets && npm run cljs:release",
+    "postinstall": "npm run copy-tree-sitter-assets",
     "test": "bb test",
-    "site": "npm run prepare-assets && bb -cp src -m loam.site"
+    "build": "npm run prepare-assets && bb build",
+    "site": "npm run build",
+    "serve": "python3 -m http.server 8070 --directory build/site"
   },
   "dependencies": {
     "@vscode/tree-sitter-wasm": "0.3.1",
@@ -16,5 +20,8 @@
     "tree-sitter-python": "0.25.0",
     "tree-sitter-typescript": "0.23.2",
     "web-tree-sitter": "0.26.8"
+  },
+  "devDependencies": {
+    "shadow-cljs": "3.4.4"
   }
 }

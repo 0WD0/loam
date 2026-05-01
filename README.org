@@ -16,28 +16,25 @@ It consumes structured EDN documents, usually produced by =ox-edn=, and turns th
 
 #+begin_src bash
 npm install
-bb test
+npm test
 
-npm run prepare-assets
-bb -cp src -m loam.site \
+npm run build -- \
   --edn-dir /path/to/edn \
   --output-dir build/site \
   --url-prefix /notes/
-#+end_src
 
-Or with Make:
-
-#+begin_src bash
-make site EDN_DIR=/path/to/edn SITE_DIR=build/site
-make serve
+npm run serve
 #+end_src
 
 If you are using the sibling =ox-edn= project:
 
 #+begin_src bash
-# Uses /home/disk/Dev/ox-edn/build/edn by default.
-make site-ox-edn SITE_DIR=build/ox-edn-site
-make serve SITE_DIR=build/ox-edn-site
+npm run build -- \
+  --edn-dir /home/disk/Projects/ox-edn/build/edn \
+  --output-dir build/site \
+  --url-prefix /notes/
+
+npm run serve
 #+end_src
 
 * Current static output
@@ -50,8 +47,10 @@ The default static build emits:
 - =search-index.json=: browser-friendly search data
 - =graph.edn= and =graph.json=: graph nodes and edges
 - =assets/site.css= and =assets/search.js=: default theme assets
-- =assets/loam-treesitter.*=: default Tree-sitter highlighter assets
-- =public/**=: user/static assets copied into output root
+- =assets/loam-treesitter.css= and =assets/loam-treesitter.json=: default Tree-sitter CSS/manifest
+- =assets/treesitter.js=: shadow-cljs-built Tree-sitter browser client
+- =assets/tree-sitter/**=: Tree-sitter WASM/query assets copied from =public/=
+- =public/**=: static assets copied into output root
 
 The sidebar groups pages by EDN relative directory, so =daily/*.edn= and other subtrees become sections automatically.
 
@@ -128,20 +127,20 @@ The extension:
 
 - overrides =:src-block= rendering with =data-loam-treesitter= markers
 - writes =assets/loam-treesitter.css=
-- writes =assets/loam-treesitter.js=
 - writes =assets/loam-treesitter.json= language manifest
-- injects its CSS and module script through Loam's =:head= extension point
+- injects CSS plus =assets/treesitter.js= through Loam's =:head= extension point
 
-Install npm deps, then sync public assets:
+The browser client lives in =src/loam/highlight/treesitter/client.cljs= and compiles with =shadow-cljs= to =public/assets/treesitter.js=. =npm run prepare-assets= also copies Tree-sitter WASM/query assets from npm packages into =public/assets/tree-sitter=.
 
 #+begin_src bash
 npm install
 npm run prepare-assets
 #+end_src
 
-Tree-sitter runtime/parser/query assets copied into =public/assets/tree-sitter= from npm packages. Site build copies =public/= into output root automatically.
+Site build copies =public/= into output root automatically.
 
 #+begin_example
+public/assets/treesitter.js
 public/assets/tree-sitter/tree-sitter.js
 public/assets/tree-sitter/tree-sitter.wasm
 public/assets/tree-sitter/languages/tree-sitter-clojure.wasm

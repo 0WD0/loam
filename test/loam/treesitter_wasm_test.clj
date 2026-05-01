@@ -29,12 +29,11 @@
                                                           :query "/x/highlights.scm"}}})]
     (is (= :loam.highlight/treesitter-wasm (:id ext)))
     (is (contains? (:assets ext) "assets/loam-treesitter.css"))
-    (is (contains? (:assets ext) "assets/loam-treesitter.js"))
+    (is (not (contains? (:assets ext) "assets/loam-treesitter.js")))
     (is (= manifest (get-in ext [:assets "assets/loam-treesitter.json"])))
     (is (nil? (:asset-files ext)))
     (is (= [[:link {:rel "stylesheet" :href "../../assets/loam-treesitter.css"}]
-            [:script {:src "../../assets/loam-treesitter.js"
-                      :type "module"
+            [:script {:src "../../assets/treesitter.js"
                       :defer true
                       :data-config "../../assets/loam-treesitter.json"
                       :data-runtime "../../assets/tree-sitter/tree-sitter.js"
