@@ -1,0 +1,18 @@
+{
+  "name": "loam",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "npm@11.12.1",
+  "scripts": {
+    "test": "bb test",
+    "site": "bb -cp src -m loam.site"
+  },
+  "dependencies": {
+    "@vscode/tree-sitter-wasm": "0.3.1",
+    "@yogthos/tree-sitter-clojure": "0.0.14",
+    "tree-sitter-javascript": "0.25.0",
+    "tree-sitter-python": "0.25.0",
+    "tree-sitter-typescript": "0.23.2",
+    "web-tree-sitter": "0.26.8"
+  }
+}

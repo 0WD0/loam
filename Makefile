@@ -6,9 +6,14 @@ URL_PREFIX ?= /notes/
 PORT ?= 8070
 OX_EDN_DIR ?= /home/disk/Dev/ox-edn/build/edn
 
-.PHONY: test site site-ox-edn serve clean
+.PHONY: test site site-ox-edn serve clean npm-install
 
-test:
+node_modules/.package-lock: package-lock.json
+	$(NPM) install
+
+npm-install: node_modules/.package-lock
+
+test: node_modules/.package-lock
 	$(BB) test
 
 site: node_modules/.package-lock
