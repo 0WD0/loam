@@ -42,6 +42,10 @@
   (ensure-dir! (.getParentFile (io/file path)))
   (spit path content))
 
+(defn copy-file! [from to]
+  (ensure-dir! (.getParentFile (io/file to)))
+  (io/copy (io/file from) (io/file to)))
+
 (defn public-index [idx]
   (select-keys idx [:pages :ids :custom-ids :titles :targets :links :backlinks :search/documents :graph]))
 
@@ -51,6 +55,10 @@
 (defn write-assets! [output-dir assets]
   (doseq [[path content] assets]
     (write-file! (.getPath (io/file output-dir path)) content)))
+
+(defn write-asset-files! [output-dir asset-files]
+  (doseq [[path source] asset-files]
+    (copy-file! source (.getPath (io/file output-dir path)))))
 
 (defn write-index! [output-dir idx]
   (write-file! (.getPath (io/file output-dir "index.edn"))
@@ -85,6 +93,7 @@
         page-layout (get-in system [:layouts :page])]
     (ensure-dir! output-dir)
     (write-assets! output-dir (:assets system))
+    (write-asset-files! output-dir (:asset-files system))
     (write-file! (.getPath (io/file output-dir "index.html"))
                  (html/document (home-layout ctx)))
     (doseq [document (:documents idx)]

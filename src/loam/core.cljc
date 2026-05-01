@@ -9,6 +9,8 @@
    :indexers []
    :layouts {}
    :assets {}
+   :asset-files {}
+   :head []
    :hooks {}})
 
 (defn- merge-hooks [a b]
@@ -24,6 +26,8 @@
   - :indexers
   - :layouts
   - :assets
+  - :asset-files
+  - :head
   - :hooks"
   [system extension]
   (-> system
@@ -33,6 +37,8 @@
       (update :indexers into (:indexers extension))
       (update :layouts merge (:layouts extension))
       (update :assets merge (:assets extension))
+      (update :asset-files merge (:asset-files extension))
+      (update :head into (:head extension))
       (update :hooks merge-hooks (:hooks extension))))
 
 (defn create-system

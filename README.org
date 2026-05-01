@@ -90,6 +90,9 @@ Extensions are plain maps:
  :indexers [(fn [index documents] ...)]
  :layouts {:page (fn [ctx document] ...)}
  :assets {"assets/theme.css" "body { ... }"}
+ :asset-files {"assets/logo.svg" "resources/logo.svg"}
+ :head [(fn [ctx current-url]
+          [[:link {:rel "stylesheet" :href "/assets/theme.css"}]])]
  :hooks {:site/built [(fn [event] event)]}}
 #+end_src
 
@@ -101,6 +104,54 @@ Install them with =loam.core/create-system= or =loam.defaults/create-system=:
 (def system
   (loam/create-system {:extensions [my-extension]}))
 #+end_src
+
+* Tree-sitter WASM highlighting
+
+Loam's default system highlights Org src blocks in the browser with Tree-sitter WASM. If you build a custom system, install the extension explicitly:
+
+#+begin_src clojure
+(require '[loam.defaults :as loam]
+         '[loam.highlight.treesitter.wasm :as ts-wasm])
+
+(def system
+  (loam/create-system
+   {:extensions
+    [(ts-wasm/extension
+      {:languages
+       {:clojure {:aliases ["clj" "cljs" "cljc" "edn"]
+                  :wasm "/assets/tree-sitter/languages/tree-sitter-clojure.wasm"
+                  :query "/assets/tree-sitter/queries/clojure/highlights.scm"}}})]}))
+#+end_src
+
+The extension:
+
+- overrides =:src-block= rendering with =data-loam-treesitter= markers
+- writes =assets/loam-treesitter.css=
+- writes =assets/loam-treesitter.js=
+- writes =assets/loam-treesitter.json= language manifest
+- copies Tree-sitter runtime/parser/query assets from npm packages through Loam's =:asset-files= extension point
+- injects its CSS and module script through Loam's =:head= extension point
+
+Install npm dependencies before building a site with the default Tree-sitter extension:
+
+#+begin_src bash
+npm install
+#+end_src
+
+The generated site receives assets copied from =node_modules=:
+
+#+begin_example
+assets/tree-sitter/tree-sitter.js                         <- web-tree-sitter
+assets/tree-sitter/tree-sitter.wasm                       <- web-tree-sitter
+assets/tree-sitter/languages/tree-sitter-clojure.wasm     <- @yogthos/tree-sitter-clojure
+assets/tree-sitter/languages/tree-sitter-javascript.wasm  <- @vscode/tree-sitter-wasm
+assets/tree-sitter/languages/tree-sitter-typescript.wasm  <- @vscode/tree-sitter-wasm
+assets/tree-sitter/languages/tree-sitter-python.wasm      <- @vscode/tree-sitter-wasm
+assets/tree-sitter/queries/*/highlights.scm               <- grammar npm packages
+assets/tree-sitter/licenses/*.txt                         <- npm package licenses
+#+end_example
+
+Keep =web-tree-sitter= and language WASM ABI versions compatible when replacing or adding grammars.
 
 * Examples
 

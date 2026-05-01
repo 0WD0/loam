@@ -19,13 +19,17 @@
 (deftest builds-static-site-from-edn-files
   (let [root (temp-dir)
         edn-dir (io/file root "edn")
-        out-dir (io/file root "site")]
+        out-dir (io/file root "site")
+        copied-asset (io/file root "copied-source.txt")]
     (.mkdirs edn-dir)
+    (spit copied-asset "copied asset")
     (write-edn! edn-dir "a.edn" fixtures/doc-a)
     (write-edn! edn-dir "daily/b.edn" fixtures/doc-b)
     (let [summary (site/build-site! {:edn-dir (.getPath edn-dir)
                                      :output-dir (.getPath out-dir)
-                                     :site-title "Test Loam"})
+                                     :site-title "Test Loam"
+                                     :extensions [{:id :test/asset-files
+                                                   :asset-files {"assets/copied.txt" (.getPath copied-asset)}}]})
           home (slurp (io/file out-dir "index.html"))
           page-a (slurp (io/file out-dir "notes" "a" "index.html"))
           public-index (edn/read-string (slurp (io/file out-dir "index.edn")))
@@ -35,6 +39,7 @@
       (is (= 2 (:edn-files summary)))
       (is (.exists (io/file out-dir "assets" "site.css")))
       (is (.exists (io/file out-dir "assets" "search.js")))
+      (is (= "copied asset" (slurp (io/file out-dir "assets" "copied.txt"))))
       (is (.exists (io/file out-dir "graph.json")))
       (is (str/includes? home "Test Loam"))
       (is (str/includes? home "data-loam-search"))

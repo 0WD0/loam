@@ -1,6 +1,7 @@
 (ns loam.theme.default
   "Default Loam static theme."
-  (:require [loam.index :as index]
+  (:require [loam.head :as head]
+            [loam.index :as index]
             [loam.render :as render]
             [loam.route :as route]
             [clojure.string :as str]))
@@ -77,14 +78,15 @@
            [:small (or (:source-title link) (:source-url link)) " — " (:text link)]])]])))
 
 (defn head [ctx title current-url]
-  [:head
-   [:meta {:charset "utf-8"}]
-   [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
-   [:title title]
-   [:link {:rel "stylesheet" :href (route/asset-url current-url "/assets/site.css")}]
-   [:script {:src (route/asset-url current-url "/assets/search.js")
-             :data-index (route/asset-url current-url "/search-index.json")
-             :defer true}]])
+  (into [:head
+         [:meta {:charset "utf-8"}]
+         [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
+         [:title title]
+         [:link {:rel "stylesheet" :href (route/asset-url current-url "/assets/site.css")}]
+         [:script {:src (route/asset-url current-url "/assets/search.js")
+                   :data-index (route/asset-url current-url "/search-index.json")
+                   :defer true}]]
+        (head/render-head ctx current-url)))
 
 (defn page [ctx document]
   (let [page-title (:title document)

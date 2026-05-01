@@ -1,9 +1,9 @@
 BB ?= bb
 NPM ?= npm
 EDN_DIR ?= build/edn
-SITE_DIR ?= build/site
+SITE_DIR ?= build/ox-edn-site
 URL_PREFIX ?= /notes/
-PORT ?= 8080
+PORT ?= 8070
 OX_EDN_DIR ?= /home/disk/Dev/ox-edn/build/edn
 
 .PHONY: test site site-ox-edn serve clean
