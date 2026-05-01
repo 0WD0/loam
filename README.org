@@ -182,7 +182,7 @@ Loam 被拆成小的、可替换的层：
 
 * System 和 Extension
 
-Loam 的运行配置叫 system。默认系统由 =loam.defaults/create-system= 创建，它会安装默认渲染器、Tree-sitter 高亮、搜索、图谱和默认主题。
+Loam 的运行配置叫 system。默认系统由 =loam.defaults/create-system= 创建，它会安装默认渲染器、高亮 provider、搜索、图谱和默认主题。默认高亮 provider 是 Tree-sitter。
 
 #+begin_src clojure
 (require '[loam.defaults :as loam])
@@ -230,6 +230,46 @@ Extension 是普通 Clojure map：
 
 Extension 按顺序安装。后安装的 extension 可以覆盖前面安装的 renderer 和 layout。
 
+* 高亮 Provider 选择
+
+默认系统只会安装一个内置高亮 provider，避免 Tree-sitter 和 Shiki 同时争抢 =:src-block=。
+
+#+begin_src clojure
+(require '[loam.defaults :as loam])
+
+;; 默认：Tree-sitter
+(loam/create-system {})
+
+;; 使用 Shiki
+(loam/create-system
+ {:highlight {:provider :shiki
+              :theme "github-dark"
+              :languages ["clojure" "javascript" "typescript" "python"]}})
+
+;; 自定义 Tree-sitter 配置
+(loam/create-system
+ {:highlight {:provider :treesitter
+              :languages {:clojure {:aliases ["clj" "cljs" "cljc" "edn"]
+                                     :wasm "/assets/tree-sitter/languages/tree-sitter-clojure.wasm"
+                                     :query "/assets/tree-sitter/queries/clojure/highlights.scm"}}}})
+
+;; 不安装默认高亮
+(loam/create-system {:highlight :none})
+#+end_src
+
+=:highlight= 支持这些值：
+
+| 值 | 说明 |
+|----+------|
+| =:treesitter= | 使用默认 Tree-sitter WASM provider |
+| =:shiki= | 使用默认 Shiki provider |
+| ={:provider :treesitter ...}= | 使用 Tree-sitter，并传入 provider 参数 |
+| ={:provider :shiki ...}= | 使用 Shiki，并传入 provider 参数 |
+| =:none= 或 =false= | 不安装内置高亮 provider |
+| extension map | 直接使用一个自定义高亮 extension |
+
+如果你在 =:extensions= 中显式放入带 =:loam.highlight/provider= 的高亮 extension，默认 Tree-sitter provider 会自动跳过。
+
 * 前端扩展和 npm 生态
 
 Loam 的前端扩展不应该只服务 Tree-sitter。Tree-sitter 只是第一个需要浏览器端代码、WASM 和 npm 包的内置扩展。更通用的模型是：
@@ -275,20 +315,19 @@ Shiki 高亮则使用 extension 生成的独立 ESM loader，因此不用把较�
 
 默认系统会在浏览器中用 Tree-sitter WASM 高亮 Org =src-block=。这只改变展示层，不改变 EDN AST 语义。
 
-如果你构建自定义系统，可以显式安装高亮扩展：
+如果你构建自定义系统，可以用 =:highlight= 显式配置 Tree-sitter：
 
 #+begin_src clojure
-(require '[loam.defaults :as loam]
-         '[loam.highlight.treesitter.wasm :as ts-wasm])
+(require '[loam.defaults :as loam])
 
 (def system
   (loam/create-system
-   {:extensions
-    [(ts-wasm/extension
-      {:languages
-       {:clojure {:aliases ["clj" "cljs" "cljc" "edn"]
-                  :wasm "/assets/tree-sitter/languages/tree-sitter-clojure.wasm"
-                  :query "/assets/tree-sitter/queries/clojure/highlights.scm"}}})]}))
+   {:highlight
+    {:provider :treesitter
+     :languages
+     {:clojure {:aliases ["clj" "cljs" "cljc" "edn"]
+                :wasm "/assets/tree-sitter/languages/tree-sitter-clojure.wasm"
+                :query "/assets/tree-sitter/queries/clojure/highlights.scm"}}}}))
 #+end_src
 
 该扩展会：
@@ -337,19 +376,21 @@ globalThis.dispatchEvent(new CustomEvent("loam:tree-sitter-runtime", {detail: ru
 自定义 runtime：
 
 #+begin_src clojure
-(ts-wasm/extension
- {:runtime "https://cdn.example.com/tree-sitter.js"
-  :runtime-global "MyTreeSitter"})
+(loam/create-system
+ {:highlight {:provider :treesitter
+              :runtime "https://cdn.example.com/tree-sitter.js"
+              :runtime-global "MyTreeSitter"}})
 #+end_src
 
 自定义语言：
 
 #+begin_src clojure
-(ts-wasm/extension
- {:languages
-  {:rust {:aliases ["rs"]
-          :wasm "/assets/tree-sitter/languages/tree-sitter-rust.wasm"
-          :query "/assets/tree-sitter/queries/rust/highlights.scm"}}})
+(loam/create-system
+ {:highlight {:provider :treesitter
+              :languages
+              {:rust {:aliases ["rs"]
+                      :wasm "/assets/tree-sitter/languages/tree-sitter-rust.wasm"
+                      :query "/assets/tree-sitter/queries/rust/highlights.scm"}}}})
 #+end_src
 
 替换或新增 grammar 时，要保证 =web-tree-sitter= runtime 和语言 WASM 的 ABI 版本兼容。
@@ -358,18 +399,17 @@ globalThis.dispatchEvent(new CustomEvent("loam:tree-sitter-runtime", {detail: ru
 
 Shiki 是另一种高亮提供方案。它基于 TextMate grammar 和主题，更偏展示效果，适合更强调主题一致性的场景。
 
-如果你想启用 Shiki，可以把它作为一个独立 extension 安装到 system 里：
+如果你想启用 Shiki，用 =:highlight= 选择 Shiki provider：
 
 #+begin_src clojure
-(require '[loam.defaults :as loam]
-         '[loam.highlight.shiki :as shiki])
+(require '[loam.defaults :as loam])
 
 (def system
   (loam/create-system
-   {:extensions
-    [(shiki/extension
-      {:theme "github-dark"
-       :languages ["clojure" "javascript" "typescript" "python"]})]}))
+   {:highlight
+    {:provider :shiki
+     :theme "github-dark"
+     :languages ["clojure" "javascript" "typescript" "python"]}}))
 #+end_src
 
 Shiki 扩展会：
@@ -461,6 +501,7 @@ Indexer 接收当前 index 和 documents，返回新的 index。
 | =:url-prefix= | ="/notes/"= | 文档页面 URL 前缀 |
 | =:public-dir= | ="public"= | 用户静态资产目录 |
 | =:site-title= | ="Loam"= | 默认主题显示的网站标题 |
+| =:highlight= | =:treesitter= | 高亮 provider；可选 =:treesitter=、=:shiki=、=:none= 或 provider 配置 map |
 | =:extensions= | =nil= | 追加安装的 extension |
 
 * 排障

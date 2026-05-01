@@ -2,20 +2,88 @@
   "Default Loam system composition."
   (:require [loam.core :as core]
             [loam.graph :as graph]
+            [loam.highlight.shiki :as shiki]
             [loam.highlight.treesitter.wasm :as treesitter.wasm]
             [loam.render :as render]
             [loam.search :as search]
             [loam.theme.default :as theme.default]))
 
+(def default-highlight :treesitter)
+
+(def highlight-extension-ids
+  #{:loam.highlight/treesitter-wasm
+    :loam.highlight/shiki})
+
+(defn highlight-extension? [extension]
+  (boolean
+   (or (:loam.highlight/provider extension)
+       (contains? highlight-extension-ids (:id extension)))))
+
+(defn- normalize-provider [provider]
+  (cond
+    (keyword? provider) provider
+    (string? provider) (keyword provider)
+    :else provider))
+
+(defn highlight-extension
+  "Create a built-in highlight extension from PROVIDER.
+
+  PROVIDER may be:
+  - :treesitter, :tree-sitter, or :tree-sitter-wasm
+  - :shiki
+  - :none or false
+  - a highlight extension map
+  - a map with :provider plus provider options"
+  [provider]
+  (cond
+    (nil? provider) (treesitter.wasm/extension)
+    (false? provider) nil
+    (and (map? provider) (:id provider)) provider
+    (map? provider) (let [provider-name (normalize-provider (or (:provider provider)
+                                                                (:type provider)))
+                          opts (dissoc provider :provider :type)]
+                      (case provider-name
+                        :treesitter (treesitter.wasm/extension opts)
+                        :tree-sitter (treesitter.wasm/extension opts)
+                        :tree-sitter-wasm (treesitter.wasm/extension opts)
+                        :shiki (shiki/extension opts)
+                        :none nil
+                        (throw (ex-info "Unknown Loam highlight provider"
+                                        {:provider provider-name}))))
+    :else (case (normalize-provider provider)
+            :treesitter (treesitter.wasm/extension)
+            :tree-sitter (treesitter.wasm/extension)
+            :tree-sitter-wasm (treesitter.wasm/extension)
+            :shiki (shiki/extension)
+            :none nil
+            (throw (ex-info "Unknown Loam highlight provider"
+                            {:provider provider})))))
+
+(defn- default-extensions-for [opts]
+  (let [user-extensions (vec (:extensions opts))
+        explicit-highlight? (contains? opts :highlight)
+        provider (if explicit-highlight?
+                   (:highlight opts)
+                   default-highlight)
+        include-highlight? (or explicit-highlight?
+                               (not (some highlight-extension? user-extensions)))
+        highlight (when include-highlight?
+                    (highlight-extension provider))]
+    (vec
+     (concat [render/extension]
+             (when highlight [highlight])
+             [search/extension
+              graph/extension
+              theme.default/extension]
+             user-extensions))))
+
 (def default-extensions
-  [render/extension
-   (treesitter.wasm/extension)
-   search/extension
-   graph/extension
-   theme.default/extension])
+  (default-extensions-for {}))
 
 (defn create-system
   ([] (create-system {}))
   ([opts]
    (core/create-system
-    (update opts :extensions #(vec (concat default-extensions %))))))
+    (assoc (dissoc opts :highlight)
+           :extensions
+           (default-extensions-for opts)))))

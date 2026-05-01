@@ -2,6 +2,7 @@
   (:require [clojure.test :as test]
             [loam.anchor-test]
             [loam.core-test]
+            [loam.defaults-test]
             [loam.graph-test]
             [loam.head-test]
             [loam.html-test]
@@ -15,6 +16,7 @@
 (defn -main [& _]
   (let [result (test/run-tests 'loam.anchor-test
                                'loam.core-test
+                               'loam.defaults-test
                                'loam.graph-test
                                'loam.head-test
                                'loam.html-test

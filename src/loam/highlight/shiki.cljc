@@ -115,6 +115,7 @@
   ([] (extension {}))
   ([opts]
    {:id :loam.highlight/shiki
+    :loam.highlight/provider :shiki
     :renderers {:src-block (render-src-block opts)}
     :head [(head-tags opts)]
     :assets {"assets/loam-shiki.css" css

@@ -85,6 +85,7 @@
   - :url-prefix default /notes/
   - :site-title default Loam
   - :public-dir default public/
+  - :highlight default :treesitter
   - :extensions extension maps"
   [opts]
   (let [edn-dir (:edn-dir opts)

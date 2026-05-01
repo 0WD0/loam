@@ -77,6 +77,7 @@
   ([] (extension {}))
   ([opts]
    {:id :loam.highlight/treesitter-wasm
+    :loam.highlight/provider :treesitter
     :renderers {:src-block render-src-block}
     :head [(head-tags opts)]
     :assets {"assets/loam-treesitter.css" css
