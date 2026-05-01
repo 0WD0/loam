@@ -38,7 +38,7 @@
     (is (= [[:link {:rel "stylesheet" :href "../../assets/loam-treesitter.css"}]
             [:script {:src "../../assets/tree-sitter/loam-runtime.js"
                       :type "module"}]
-            [:script {:src "../../assets/treesitter.js"
+            [:script {:src "../../assets/loam-client.js"
                       :defer true
                       :data-config "../../assets/loam-treesitter.json"
                       :data-runtime-global "LoamTreeSitter"

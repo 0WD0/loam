@@ -17,7 +17,7 @@ Loam 的核心立场是：Org 已经有丰富语义，站点生成器不应该�
 
 * 快速开始
 
-先安装 Node 依赖。Node 依赖用于同步 Tree-sitter WASM/query 资源，并通过 =shadow-cljs= 编译浏览器端客户端。
+先安装 Node 依赖。Node 依赖用于同步 npm 资源，并通过 =shadow-cljs= 编译 Loam 的浏览器端客户端。
 
 #+begin_src bash
 npm install
@@ -64,8 +64,9 @@ npm run serve
 | =npm install= | 安装 npm 依赖，并复制 Tree-sitter npm 资源 |
 | =npm test= | 运行 Clojure 测试 |
 | =npm run copy-tree-sitter-assets= | 只同步 Tree-sitter runtime、WASM、query、license 文件 |
-| =npm run cljs:release= | 用 =shadow-cljs= 编译浏览器端 Tree-sitter 客户端 |
-| =npm run prepare-assets= | 同步 Tree-sitter 资源并编译浏览器端客户端 |
+| =npm run client:release= | 用 =shadow-cljs= 编译 Loam 浏览器端客户端 |
+| =npm run cljs:release= | =client:release= 的兼容别名 |
+| =npm run prepare-assets= | 同步 npm 资源并编译浏览器端客户端 |
 | =npm run build -- ...= | 准备资产并调用 =bb build= 构建站点 |
 | =npm run serve= | 用 Python HTTP server 预览 =build/site= |
 | =bb build -- ...= | 只运行 Loam 静态构建；调用前需要自行准备资产 |
@@ -110,7 +111,7 @@ loam.site/build-site!
 - =assets/site.css= 和 =assets/search.js=：默认主题资产
 - =assets/loam-treesitter.css=：Tree-sitter 高亮样式
 - =assets/loam-treesitter.json=：Tree-sitter 语言 manifest
-- =assets/treesitter.js=：由 =shadow-cljs= 编译的浏览器端高亮客户端
+- =assets/loam-client.js=：由 =shadow-cljs= 编译的 Loam 浏览器端客户端
 - =assets/tree-sitter/loam-runtime.js=：CSP 友好的 ESM runtime loader
 - =assets/tree-sitter/**=：Tree-sitter runtime、WASM、query、license 文件
 - =public/**=：用户静态文件，构建时复制到输出目录根部
@@ -132,10 +133,10 @@ Tree-sitter npm 资源不手动提交到仓库。它们由脚本同步到 =publi
 npm run copy-tree-sitter-assets
 #+end_src
 
-浏览器端客户端由 =shadow-cljs= 编译到 =public/assets/treesitter.js=：
+Loam 的浏览器端客户端由 =shadow-cljs= 编译到 =public/assets/loam-client.js=：
 
 #+begin_src bash
-npm run cljs:release
+npm run client:release
 #+end_src
 
 通常直接运行：
@@ -144,7 +145,7 @@ npm run cljs:release
 npm run prepare-assets
 #+end_src
 
-=public/assets/tree-sitter/= 和 =public/assets/treesitter.js= 是生成物，已经在 =.gitignore= 中忽略。
+=public/assets/tree-sitter/= 和 =public/assets/loam-client.js= 是生成物，已经在 =.gitignore= 中忽略。
 
 * 架构
 
@@ -165,7 +166,8 @@ Loam 被拆成小的、可替换的层：
 | =loam.head= | extension 注入 =<head>= 的辅助函数 |
 | =loam.theme.default= | 默认布局、分组侧边栏、搜索 UI、主题 CSS/JS |
 | =loam.highlight.treesitter.wasm= | src block Tree-sitter WASM 高亮扩展 |
-| =loam.highlight.treesitter.client= | 浏览器端高亮客户端，使用 =shadow-cljs= 编译 |
+| =loam.client= | Loam 浏览器端客户端入口，使用 =shadow-cljs= 编译 |
+| =loam.highlight.treesitter.client= | Tree-sitter 高亮客户端模块，由 =loam.client= 引入 |
 | =loam.site= | 静态站点构建器和 CLI 入口 |
 
 最重要的设计点：渲染不是一个框架内部封闭的巨大 =case=。渲染器是 system map 里的 registry：
@@ -227,6 +229,45 @@ Extension 是普通 Clojure map：
 
 Extension 按顺序安装。后安装的 extension 可以覆盖前面安装的 renderer 和 layout。
 
+* 前端扩展和 npm 生态
+
+Loam 的前端扩展不应该只服务 Tree-sitter。Tree-sitter 只是第一个需要浏览器端代码、WASM 和 npm 包的内置扩展。更通用的模型是：
+
+- Clojure/EDN 层 extension 负责语义渲染、索引、布局、head 注入和 manifest
+- npm 生态负责浏览器端依赖，例如 WASM runtime、UI 小组件、搜索库、图谱可视化库
+- =shadow-cljs= 负责编译 Loam 自带的浏览器端入口
+- =public/= 负责承载 npm 同步出来的静态资源和用户自定义资源
+- =:head= 负责把编译产物或 ESM loader 注入页面
+
+现在 Loam 有一个通用浏览器入口：
+
+#+begin_example
+src/loam/client.cljs
+#+end_example
+
+它会被编译成：
+
+#+begin_example
+public/assets/loam-client.js
+#+end_example
+
+Tree-sitter 高亮只是被 =loam.client= 引入的一个客户端模块：
+
+#+begin_example
+src/loam/highlight/treesitter/client.cljs
+#+end_example
+
+未来如果新增前端扩展，例如 Graph 交互、全文搜索 UI、代码复制按钮、图片灯箱、脚注 hover preview，可以把对应 CLJS namespace 加到 =loam.client=，并在该 namespace 中直接使用 npm 包：
+
+#+begin_src clojure
+(ns loam.client.my-widget
+  (:require ["some-npm-package" :as widget]))
+#+end_src
+
+如果某个扩展更适合直接使用 ESM，而不是打进 =loam-client.js=，也可以像 Tree-sitter runtime loader 一样，由 extension 生成一个小的 =type="module"= loader，再通过 =:head= 注入。
+
+因此当前约定是：Loam 内置交互走通用 =loam-client.js=；较大的第三方 ESM/WASM runtime 可以保持为独立静态资产。这样既能使用 npm 生态，又不会把所有 runtime 都强行塞进一个 bundle。
+
 * Tree-sitter WASM 高亮
 
 默认系统会在浏览器中用 Tree-sitter WASM 高亮 Org =src-block=。这只改变展示层，不改变 EDN AST 语义。
@@ -253,18 +294,18 @@ Extension 按顺序安装。后安装的 extension 可以覆盖前面安装的 r
 - 写入 =assets/loam-treesitter.css=
 - 写入 =assets/loam-treesitter.json= 语言 manifest
 - 写入 =assets/tree-sitter/loam-runtime.js= ESM loader
-- 通过 =:head= 注入 CSS、runtime loader 和 =assets/treesitter.js=
+- 通过 =:head= 注入 CSS、runtime loader 和 =assets/loam-client.js=
 
-浏览器端客户端位于：
+Tree-sitter 浏览器端模块位于：
 
 #+begin_example
 src/loam/highlight/treesitter/client.cljs
 #+end_example
 
-它由 =shadow-cljs= 编译到：
+它由通用入口 =loam.client= 引入，并通过 =shadow-cljs= 编译到：
 
 #+begin_example
-public/assets/treesitter.js
+public/assets/loam-client.js
 #+end_example
 
 Tree-sitter runtime、语言 WASM、query 文件由 npm 包同步到：
@@ -288,7 +329,7 @@ globalThis["LoamTreeSitter"] = runtime;
 globalThis.dispatchEvent(new CustomEvent("loam:tree-sitter-runtime", {detail: runtime}));
 #+end_src
 
-这样 =assets/treesitter.js= 不需要使用 =Function(...)= 或动态 =import(...)=，对严格 CSP 更友好。注意：如果站点启用了非常严格的 CSP，WASM 编译本身可能仍需要浏览器支持的 WASM 相关策略，例如 =wasm-unsafe-eval=；这取决于浏览器和部署环境。
+这样 =assets/loam-client.js= 不需要使用 =Function(...)= 或动态 =import(...)=，对严格 CSP 更友好。注意：如果站点启用了非常严格的 CSP，WASM 编译本身可能仍需要浏览器支持的 WASM 相关策略，例如 =wasm-unsafe-eval=；这取决于浏览器和部署环境。
 
 自定义 runtime：
 
@@ -401,7 +442,7 @@ npm run prepare-assets
 检查输出目录是否包含：
 
 #+begin_example
-assets/treesitter.js
+assets/loam-client.js
 assets/tree-sitter/loam-runtime.js
 assets/tree-sitter/tree-sitter.js
 assets/tree-sitter/tree-sitter.wasm

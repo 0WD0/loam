@@ -14,9 +14,9 @@
   "Default language manifest.
 
   Matching language WASM/query files expected under
-  `public/assets/tree-sitter`. The browser client is compiled to
-  `public/assets/treesitter.js` with `npm run cljs:release`. Use
-  `npm run prepare-assets` to sync and compile defaults from node_modules.
+  `public/assets/tree-sitter`. The browser client is part of the generic
+  `public/assets/loam-client.js` bundle built by `npm run client:release`.
+  Use `npm run prepare-assets` to sync and compile defaults from node_modules.
   Pass custom :languages map to `extension` to add or replace languages."
   {:clojure {:aliases ["clj" "cljs" "cljc" "edn"]
              :wasm "/assets/tree-sitter/languages/tree-sitter-clojure.wasm"
@@ -77,7 +77,7 @@
       [(head/stylesheet current-url "/assets/loam-treesitter.css")
        (head/script current-url "/assets/tree-sitter/loam-runtime.js"
                     {:type "module"})
-       (head/script current-url "/assets/treesitter.js"
+       (head/script current-url "/assets/loam-client.js"
                     {:defer true
                      :data-config (head/asset-url current-url "/assets/loam-treesitter.json")
                      :data-runtime-global runtime-global

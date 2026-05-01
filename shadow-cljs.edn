@@ -1,9 +1,9 @@
 {:source-paths ["src"]
  :js-options {:js-package-dirs ["node_modules"]}
  :builds
- {:treesitter
+ {:client
   {:target :browser
    :output-dir "public/assets"
    :asset-path "/assets"
-   :modules {:treesitter {:entries [loam.highlight.treesitter.client]}}
+   :modules {:loam-client {:entries [loam.client]}}
    :compiler-options {:output-feature-set :es-next-in}}}}

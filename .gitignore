@@ -7,4 +7,5 @@ target/
 node_modules/
 public/assets/manifest.edn
 public/assets/tree-sitter/
+public/assets/loam-client.js*
 public/assets/treesitter.js*

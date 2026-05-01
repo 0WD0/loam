@@ -5,8 +5,9 @@
   "packageManager": "npm@11.12.1",
   "scripts": {
     "copy-tree-sitter-assets": "node scripts/copy-tree-sitter-assets.mjs",
-    "cljs:release": "shadow-cljs release treesitter",
-    "prepare-assets": "npm run copy-tree-sitter-assets && npm run cljs:release",
+    "client:release": "shadow-cljs release client",
+    "cljs:release": "npm run client:release",
+    "prepare-assets": "npm run copy-tree-sitter-assets && npm run client:release",
     "postinstall": "npm run copy-tree-sitter-assets",
     "test": "bb test",
     "build": "npm run prepare-assets && bb build",
