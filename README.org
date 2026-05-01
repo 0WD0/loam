@@ -147,6 +147,33 @@ npm run prepare-assets
 
 =public/assets/tree-sitter/= 和 =public/assets/loam-client.js= 是生成物，已经在 =.gitignore= 中忽略。
 
+* 声明式 Web System
+
+Loam 可以被理解成一个声明式 Web system，而不只是模板渲染器。如果把一个 Web 应用类比成操作系统，那么 Loam 的 system map 就类似系统配置：它声明内容如何被读取、索引、渲染、布局、注入 head、写入资产，以及构建完成后触发哪些 hook。
+
+这个类比接近 Guix 的思路：不是手工拼页面，而是把输入、服务和输出都变成可组合的数据。
+
+| Loam 概念 | 类比 | 说明 |
+|-----------+------+------|
+| =loam.defaults/create-system= | system 配置入口 | 组合默认能力和用户配置 |
+| EDN AST | 声明式源数据 | 由 =ox-edn= 从 Org 语义导出 |
+| extension | package / service | 声明 renderer、indexer、layout、asset、head、hook |
+| =:renderers= / =:indexers= / =:layouts= | service extension point | 后安装者可以覆盖或追加能力 |
+| =:highlight= | service variant | 在 Tree-sitter、Shiki、none 或自定义 provider 之间选择 |
+| =public/= 和 npm 资源 | 外部输入 / store 内容 | 作为静态构建的资源输入 |
+| =build-site!= | build derivation | 从 system 和 EDN 输入生成一个静态输出目录 |
+| =output-dir= | generation | 一个可以部署、回滚或比较的构建结果 |
+
+这个方向带来几个架构原则：
+
+- 声明优先：用户描述想要的 system，而不是在构建过程中到处手动改状态
+- 扩展有身份：extension 应该有 =:id=，重要能力也应该声明 provider 或角色
+- 冲突显式化：像高亮 provider 这种互斥能力，要通过 system 选择，而不是靠安装顺序碰运气
+- 资产可追踪：npm、WASM、CSS、JS 都应该能从声明追到输出路径
+- 输出可复现：同一份 EDN 输入和同一个 system，应该生成可解释、可比较的静态站点
+
+因此 Loam 的长期方向不是变成大型前端框架，而是成为 Org/EDN 驱动的声明式 Web system 构建层。
+
 * 架构
 
 Loam 被拆成小的、可替换的层：
