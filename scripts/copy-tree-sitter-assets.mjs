@@ -7,8 +7,8 @@ const root = path.resolve(__dirname, '..');
 const outRoot = path.join(root, 'public', 'assets', 'tree-sitter');
 
 const assetMap = {
-  'tree-sitter.js': 'node_modules/web-tree-sitter/web-tree-sitter.js',
-  'tree-sitter.wasm': 'node_modules/web-tree-sitter/web-tree-sitter.wasm',
+  'tree-sitter.js': 'node_modules/@vscode/tree-sitter-wasm/wasm/tree-sitter.js',
+  'tree-sitter.wasm': 'node_modules/@vscode/tree-sitter-wasm/wasm/tree-sitter.wasm',
 
   'languages/tree-sitter-clojure.wasm': 'node_modules/@yogthos/tree-sitter-clojure/tree-sitter-clojure.wasm',
   'languages/tree-sitter-javascript.wasm': 'node_modules/@vscode/tree-sitter-wasm/wasm/tree-sitter-javascript.wasm',

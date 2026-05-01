@@ -59,12 +59,13 @@
       "text"))
 
 (defn language-config [manifest lang]
-  (if-let [conf (get-in manifest [:languages lang])]
-    (assoc conf :canonical lang)
-    (some (fn [[name conf]]
-            (when (some #{lang} (:aliases conf))
-              (assoc conf :canonical name)))
-          (:languages manifest))))
+  (let [lang-key (keyword lang)]
+    (if-let [conf (get-in manifest [:languages lang-key])]
+      (assoc conf :canonical lang-key)
+      (some (fn [[name conf]]
+              (when (some #{lang} (:aliases conf))
+                (assoc conf :canonical name)))
+            (:languages manifest)))))
 
 (defn fetch-json [url]
   (-> (js/fetch (asset-url url))
@@ -249,8 +250,9 @@
                      (render-ranges! code-el source ranges)
                      (clear-status! code-el)))))
         (.catch (fn [error]
-                  (.error js/console "[loam-treesitter]" error)
-                  (set-status! code-el "error" "tree-sitter error"))))))
+                  (let [msg (or (.-message error) (str error))]
+                    (.error js/console "[loam-treesitter]" error)
+                    (set-status! code-el "error" (str "ts: " msg))))))))
 
 (defn code-blocks []
   (->> (seq-from (.querySelectorAll js/document "code[data-loam-treesitter]"))
@@ -279,9 +281,10 @@
                                                            (.resolve js/Promise nil)
                                                            blocks))))))))))))
           (.catch (fn [error]
-                    (.error js/console "[loam-treesitter]" error)
-                    (doseq [code-el blocks]
-                      (set-status! code-el "error" "tree-sitter error"))))))))
+                    (let [msg (or (.-message error) (str error))]
+                      (.error js/console "[loam-treesitter]" error)
+                      (doseq [code-el blocks]
+                        (set-status! code-el "error" (str "ts: " msg))))))))))
 
 (defn init []
   (if (= "loading" (.-readyState js/document))

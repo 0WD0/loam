@@ -49,9 +49,10 @@
 (defn runtime-loader-js [opts]
   (let [runtime (or (:runtime opts) "./tree-sitter.js")
         runtime-global (or (:runtime-global opts) "LoamTreeSitter")]
-    (str "import * as runtime from " (json/render-json runtime) ";\n"
-         "globalThis[" (json/render-json runtime-global) "] = runtime;\n"
-         "globalThis.dispatchEvent(new CustomEvent('loam:tree-sitter-runtime', {detail: runtime}));\n")))
+    (str "import(" (json/render-json runtime) ").then(() => {\n"
+         "  globalThis[" (json/render-json runtime-global) "] = globalThis.Parser;\n"
+         "  globalThis.dispatchEvent(new CustomEvent('loam:tree-sitter-runtime', {detail: globalThis.Parser}));\n"
+         "});\n")))
 
 (defn head-tags [opts]
   (fn [_ctx current-url]

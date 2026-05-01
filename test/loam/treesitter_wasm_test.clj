@@ -34,7 +34,9 @@
     (is (= manifest (get-in ext [:extends :assets "assets/loam-treesitter.json"])))
     (is (contains? (get-in ext [:extends :assets]) "assets/tree-sitter/loam-runtime.js"))
     (is (str/includes? (get-in ext [:extends :assets "assets/tree-sitter/loam-runtime.js"])
-                       "import * as runtime from \"./tree-sitter.js\";"))
+                       "import(\"./tree-sitter.js\").then(() => {"))
+    (is (str/includes? (get-in ext [:extends :assets "assets/tree-sitter/loam-runtime.js"])
+                       "globalThis[\"LoamTreeSitter\"] = globalThis.Parser;"))
     (is (nil? (:asset-files ext)))
     (is (= [[:link {:rel "stylesheet" :href "../../assets/loam-treesitter.css"}]
             [:script {:src "../../assets/tree-sitter/loam-runtime.js"
