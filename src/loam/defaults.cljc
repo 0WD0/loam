@@ -1,6 +1,7 @@
 (ns loam.defaults
   "Default Loam system composition."
   (:require [loam.core :as core]
+            [loam.graph :as graph]
             [loam.render :as render]
             [loam.search :as search]
             [loam.theme.default :as theme.default]))
@@ -8,6 +9,7 @@
 (def default-extensions
   [render/extension
    search/extension
+   graph/extension
    theme.default/extension])
 
 (defn create-system

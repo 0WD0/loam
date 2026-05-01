@@ -25,6 +25,8 @@
         ast (if source (assoc-in ast [:properties :path] source) ast)]
     {:ast ast
      :source source
+     :source-rel (:source-rel doc)
+     :source-dir (:source-dir doc)
      :id (ast/document-id ast)
      :title (ast/document-title ast)
      :url (or (:url doc) (document-url system ast))}))
@@ -35,6 +37,8 @@
         anchor (ast/node-anchor node)]
     {:type type
      :source (:source document)
+     :source-rel (:source-rel document)
+     :source-dir (:source-dir document)
      :page-id (:id document)
      :page-title (:title document)
      :page-url (:url document)
@@ -48,6 +52,8 @@
 (defn page-entry [document]
   {:type :org-data
    :source (:source document)
+   :source-rel (:source-rel document)
+   :source-dir (:source-dir document)
    :page-id (:id document)
    :page-title (:title document)
    :page-url (:url document)
@@ -93,6 +99,8 @@
   (let [p (ast/props node)
         heading (:heading ctx)]
     {:source (:source document)
+     :source-rel (:source-rel document)
+     :source-dir (:source-dir document)
      :source-id (:id document)
      :source-title (:title document)
      :source-url (:url document)

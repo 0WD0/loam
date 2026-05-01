@@ -31,6 +31,28 @@ make site EDN_DIR=/path/to/edn SITE_DIR=build/site
 make serve
 #+end_src
 
+If you are using the sibling =ox-edn= project:
+
+#+begin_src bash
+# Uses /home/disk/Dev/ox-edn/build/edn by default.
+make site-ox-edn SITE_DIR=build/ox-edn-site
+make serve SITE_DIR=build/ox-edn-site
+#+end_src
+
+* Current static output
+
+The default static build emits:
+
+- =index.html=: home page with grouped sidebar and search UI
+- =notes/<slug>/index.html=: one page per EDN document
+- =index.edn=: public navigation/link/backlink/search/graph index
+- =search-index.json=: browser-friendly search data
+- =graph.edn= and =graph.json=: graph nodes and edges
+- =assets/site.css= and =assets/search.js=: default theme assets
+- =assets/loam-treesitter.*= and =assets/tree-sitter/**=: default Tree-sitter highlighter assets
+
+The sidebar groups pages by EDN relative directory, so =daily/*.edn= and other subtrees become sections automatically.
+
 * Architecture
 
 Loam is split into small replaceable layers:
@@ -42,7 +64,9 @@ Loam is split into small replaceable layers:
 | =loam.index= | IDs, custom IDs, targets, links, backlinks, URL resolution |
 | =loam.render= | Registry-based AST -> Hiccup rendering |
 | =loam.html= | Minimal Hiccup -> HTML serialization |
-| =loam.theme.default= | Default layouts and CSS |
+| =loam.json= | Minimal JSON serialization for static artifacts |
+| =loam.graph= | Graph data extension |
+| =loam.theme.default= | Default layouts, grouped sidebar, search UI, CSS/JS assets |
 | =loam.search= | Search index extension |
 | =loam.site= | Static site builder / CLI |
 

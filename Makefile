@@ -4,8 +4,9 @@ EDN_DIR ?= build/edn
 SITE_DIR ?= build/site
 URL_PREFIX ?= /notes/
 PORT ?= 8080
+OX_EDN_DIR ?= /home/disk/Dev/ox-edn/build/edn
 
-.PHONY: test site serve clean
+.PHONY: test site site-ox-edn serve clean
 
 test:
 	$(BB) test
@@ -15,6 +16,9 @@ site: node_modules/.package-lock
 	  --edn-dir "$(EDN_DIR)" \
 	  --output-dir "$(SITE_DIR)" \
 	  --url-prefix "$(URL_PREFIX)"
+
+site-ox-edn:
+	$(MAKE) site EDN_DIR="$(OX_EDN_DIR)"
 
 serve:
 	cd "$(SITE_DIR)" && python3 -m http.server "$(PORT)"
