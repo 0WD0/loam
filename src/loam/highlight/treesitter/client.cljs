@@ -125,14 +125,15 @@
   (let [Parser (:parser runtime)]
     (if (gobj/get Parser "__loamInitialized")
       (.resolve js/Promise nil)
-      (-> (.init Parser #js {:locateFile (fn [script-name]
-                                           (asset-url
-                                            (if (str/ends-with? script-name ".wasm")
-                                              runtime-wasm-url
-                                              script-name)))})
-          (.then (fn [value]
-                   (gobj/set Parser "__loamInitialized" true)
-                   value))))))
+      (let [init (gobj/get Parser "init")]
+        (-> (.call init Parser #js {:locateFile (fn [script-name]
+                                                  (asset-url
+                                                   (if (str/ends-with? script-name ".wasm")
+                                                     runtime-wasm-url
+                                                     script-name)))})
+            (.then (fn [value]
+                     (gobj/set Parser "__loamInitialized" true)
+                     value)))))))
 
 (defn seq-from [value]
   (array-seq (.from js/Array (or value #js []))))
@@ -243,14 +244,16 @@
 
 (defn load-highlighter [runtime conf]
   (let [Parser (:parser runtime)
-        Language (:language runtime)]
-    (-> (.load Language (asset-url (:wasm conf)))
+        Language (:language runtime)
+        load-language (gobj/get Language "load")]
+    (-> (.call load-language Language (asset-url (:wasm conf)))
         (.then (fn [language]
                  (-> (fetch-text (:query conf))
                      (.then (fn [query-text]
                               (let [parser (new Parser)
+                                    set-language (gobj/get parser "setLanguage")
                                     query (make-query runtime language query-text)]
-                                (.setLanguage parser language)
+                                (.call set-language parser language)
                                 {:parser parser :query query})))))))))
 
 (defn get-highlighter [runtime manifest highlighters lang]
@@ -271,7 +274,8 @@
                  (if-not highlighter
                    (set-status! code-el "missing" (str "no tree-sitter parser for " lang))
                    (let [source (or (.-textContent code-el) "")
-                         tree (.parse (:parser highlighter) source)
+                         parse (gobj/get (:parser highlighter) "parse")
+                         tree (.call parse (:parser highlighter) source)
                          captures (query-captures (:query highlighter) (gobj/get tree "rootNode"))
                          ranges (normalize-ranges captures (:query highlighter))]
                      (render-ranges! code-el source ranges)
