@@ -35,8 +35,8 @@
     (is (str/includes? (pr-str (render/render-document system src-node))
                        ":data-loam-shiki true"))))
 
-(deftest user-highlight-extension-suppresses-default-treesitter
-  (let [system (defaults/create-system {:extensions [(shiki/extension)]})]
+(deftest highlight-extension-map-installs-custom-provider
+  (let [system (defaults/create-system {:highlight (shiki/extension {:theme "github-light"})})]
     (is (not (contains? (extension-ids system) :loam.highlight/treesitter-wasm)))
     (is (contains? (extension-ids system) :loam.highlight/shiki))
     (is (not (contains? (:assets system) "assets/loam-treesitter.css")))

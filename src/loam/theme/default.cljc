@@ -131,7 +131,7 @@
 
 (def extension
   {:id :loam.theme/default
-   :layouts {:page page
-             :home home}
-   :assets {"assets/site.css" css
-            "assets/search.js" search-js}})
+   :extends {:layouts {:page page
+                       :home home}
+             :assets {"assets/site.css" css
+                      "assets/search.js" search-js}}})

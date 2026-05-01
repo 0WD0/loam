@@ -78,8 +78,8 @@
   ([opts]
    {:id :loam.highlight/treesitter-wasm
     :loam.highlight/provider :treesitter
-    :renderers {:src-block render-src-block}
-    :head [(head-tags opts)]
-    :assets {"assets/loam-treesitter.css" css
-             "assets/loam-treesitter.json" (json/render-json (manifest opts))
-             "assets/tree-sitter/loam-runtime.js" (runtime-loader-js opts)}}))
+    :extends {:renderers {:src-block render-src-block}
+              :head [(head-tags opts)]
+              :assets {"assets/loam-treesitter.css" css
+                       "assets/loam-treesitter.json" (json/render-json (manifest opts))
+                       "assets/tree-sitter/loam-runtime.js" (runtime-loader-js opts)}}}))

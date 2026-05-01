@@ -14,4 +14,4 @@
 
 (def extension
   {:id :loam/search
-   :indexers [search-indexer]})
+   :extends {:indexers [search-indexer]}})

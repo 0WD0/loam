@@ -18,8 +18,8 @@
 
 (deftest allows-renderer-extension-override
   (let [ext {:id :test/render
-             :renderers {:paragraph (fn [_ node]
-                                      [[:p.custom (str "custom:" (count (:contents node)))]] )}}
+             :extends {:renderers {:paragraph (fn [_ node]
+                                                [[:p.custom (str "custom:" (count (:contents node)))]] )}}}
         system (defaults/create-system {:extensions [ext]})]
     (is (= [:div.loam-document [:p.custom "custom:1"]]
            (render/render-document system {:type :paragraph :contents ["x"]})))))

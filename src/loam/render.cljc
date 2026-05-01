@@ -170,5 +170,5 @@
 
 (def extension
   {:id :loam/render
-   :renderers (default-renderers)
-   :inline-types default-inline-types})
+   :extends {:renderers (default-renderers)
+             :inline-types default-inline-types}})

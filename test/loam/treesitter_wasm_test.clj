@@ -1,13 +1,13 @@
 (ns loam.treesitter-wasm-test
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is]]
+            [loam.core :as core]
             [loam.highlight.treesitter.wasm :as ts-wasm]
             [loam.json :as json]
             [loam.render :as render]))
 
 (deftest renders-src-block-for-client-side-treesitter
-  (let [system {:renderers (:renderers (ts-wasm/extension))
-                :inline-types #{}}
+  (let [system (core/create-system {:extensions [(ts-wasm/extension)]})
         node {:type :src-block
               :properties {:language "cljs"
                            :value "(defn foo [] :ok)"}}]
@@ -29,11 +29,11 @@
                                                           :wasm "/x/clj.wasm"
                                                           :query "/x/highlights.scm"}}})]
     (is (= :loam.highlight/treesitter-wasm (:id ext)))
-    (is (contains? (:assets ext) "assets/loam-treesitter.css"))
-    (is (not (contains? (:assets ext) "assets/loam-treesitter.js")))
-    (is (= manifest (get-in ext [:assets "assets/loam-treesitter.json"])))
-    (is (contains? (:assets ext) "assets/tree-sitter/loam-runtime.js"))
-    (is (str/includes? (get-in ext [:assets "assets/tree-sitter/loam-runtime.js"])
+    (is (contains? (get-in ext [:extends :assets]) "assets/loam-treesitter.css"))
+    (is (not (contains? (get-in ext [:extends :assets]) "assets/loam-treesitter.js")))
+    (is (= manifest (get-in ext [:extends :assets "assets/loam-treesitter.json"])))
+    (is (contains? (get-in ext [:extends :assets]) "assets/tree-sitter/loam-runtime.js"))
+    (is (str/includes? (get-in ext [:extends :assets "assets/tree-sitter/loam-runtime.js"])
                        "import * as runtime from \"./tree-sitter.js\";"))
     (is (nil? (:asset-files ext)))
     (is (= [[:link {:rel "stylesheet" :href "../../assets/loam-treesitter.css"}]
@@ -44,4 +44,4 @@
                       :data-config "../../assets/loam-treesitter.json"
                       :data-runtime-global "LoamTreeSitter"
                       :data-runtime-wasm "../../assets/tree-sitter/tree-sitter.wasm"}]]
-           ((first (:head ext)) {} "/notes/a")))))
+           ((first (get-in ext [:extends :head])) {} "/notes/a")))))

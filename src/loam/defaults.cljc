@@ -10,15 +10,6 @@
 
 (def default-highlight :treesitter)
 
-(def highlight-extension-ids
-  #{:loam.highlight/treesitter-wasm
-    :loam.highlight/shiki})
-
-(defn highlight-extension? [extension]
-  (boolean
-   (or (:loam.highlight/provider extension)
-       (contains? highlight-extension-ids (:id extension)))))
-
 (defn- normalize-provider [provider]
   (cond
     (keyword? provider) provider
@@ -61,14 +52,10 @@
 
 (defn- default-extensions-for [opts]
   (let [user-extensions (vec (:extensions opts))
-        explicit-highlight? (contains? opts :highlight)
-        provider (if explicit-highlight?
+        provider (if (contains? opts :highlight)
                    (:highlight opts)
                    default-highlight)
-        include-highlight? (or explicit-highlight?
-                               (not (some highlight-extension? user-extensions)))
-        highlight (when include-highlight?
-                    (highlight-extension provider))]
+        highlight (highlight-extension provider)]
     (vec
      (concat [render/extension]
              (when highlight [highlight])

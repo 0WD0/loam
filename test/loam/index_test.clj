@@ -26,8 +26,8 @@
 
 (deftest allows-custom-indexer-extension
   (let [ext {:id :test/indexer
-             :indexers [(fn [idx documents]
-                          (assoc idx :document-count (count documents)))]}
+             :extends {:indexers [(fn [idx documents]
+                                    (assoc idx :document-count (count documents)))]}}
         idx (index/build-index (defaults/create-system {:extensions [ext]})
                                [fixtures/doc-a fixtures/doc-b])]
     (is (= 2 (:document-count idx)))))

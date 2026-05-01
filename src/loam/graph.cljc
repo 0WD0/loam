@@ -41,4 +41,4 @@
 
 (def extension
   {:id :loam/graph
-   :indexers [graph-indexer]})
+   :extends {:indexers [graph-indexer]}})
