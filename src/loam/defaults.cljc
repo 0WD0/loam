@@ -7,7 +7,8 @@
             [loam.highlight.treesitter.wasm :as treesitter.wasm]
             [loam.render :as render]
             [loam.search :as search]
-            [loam.theme.default :as theme.default]))
+            [loam.theme.default :as theme.default]
+            [loam.toc :as toc]))
 
 (def default-highlight :treesitter)
 
@@ -63,6 +64,7 @@
              [search/extension
               graph/extension
               directory/extension
+              toc/extension
               theme.default/extension]
              user-extensions))))
 

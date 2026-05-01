@@ -12,6 +12,7 @@
             [loam.render-test]
             [loam.shiki-test]
             [loam.site-test]
+            [loam.toc-test]
             [loam.treesitter-wasm-test]))
 
 (defn -main [& _]
@@ -27,6 +28,7 @@
                                'loam.render-test
                                'loam.shiki-test
                                'loam.site-test
+                               'loam.toc-test
                                'loam.treesitter-wasm-test)]
     (when (pos? (+ (:fail result) (:error result)))
       (System/exit 1))))

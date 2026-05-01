@@ -12,7 +12,7 @@
    "*{box-sizing:border-box}body{margin:0;font:16px/1.6 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:var(--text);background:var(--bg)}a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}"
    ".site-shell{display:grid;grid-template-columns:20rem minmax(0,1fr);min-height:100vh}.site-nav{position:sticky;top:0;height:100vh;background:var(--panel);color:#e2e8f0;padding:1rem;overflow:auto}.site-nav a{color:#e2e8f0}.site-title{font-weight:800;font-size:1.25rem;margin-bottom:1rem}.site-title a{display:inline-block}.site-section{margin:.75rem 0}.site-section summary{cursor:pointer;color:#cbd5e1;font-weight:700;font-size:.85rem;text-transform:uppercase;letter-spacing:.04em}.site-section ol{list-style:none;margin:.35rem 0 .75rem 0;padding:0}.site-section li{margin:.15rem 0}.site-page-link{display:block;padding:.2rem .35rem;border-radius:.35rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.site-page-link[aria-current=page],.site-page-link:hover{background:var(--panel-2);text-decoration:none}.site-count{color:#94a3b8;font-weight:400;text-transform:none}"
    ".search-box{margin:0 0 1rem 0}.search-box input{width:100%;border:1px solid #334155;border-radius:.45rem;background:#020617;color:#e2e8f0;padding:.55rem .65rem}.search-box input::placeholder{color:#94a3b8}.search-results{list-style:none;margin:.5rem 0 0 0;padding:0;max-height:18rem;overflow:auto}.search-results li{border-top:1px solid #1e293b;padding:.4rem 0}.search-results a{font-weight:700}.search-results small{display:block;color:#94a3b8;line-height:1.35}.search-empty{color:#94a3b8;font-size:.9rem}"
-   ".site-main{max-width:64rem;padding:2rem 3rem;background:white}.home-main{max-width:72rem}.hero{border-bottom:1px solid var(--line);margin-bottom:1.5rem;padding-bottom:1rem}.hero h1{font-size:2.25rem;line-height:1.1;margin:.25rem 0}.stats{display:flex;flex-wrap:wrap;gap:.75rem;margin:1rem 0}.stat{border:1px solid var(--line);border-radius:.65rem;padding:.7rem .9rem;min-width:8rem;background:#f8fafc}.stat strong{display:block;font-size:1.4rem}.stat span{color:var(--muted);font-size:.9rem}.page-list{columns:2;list-style:none;padding:0}.page-list li{break-inside:avoid;margin:.25rem 0}"
+   ".site-main{max-width:64rem;padding:2rem 3rem;background:white}.home-main{max-width:72rem}.hero{border-bottom:1px solid var(--line);margin-bottom:1.5rem;padding-bottom:1rem}.hero h1{font-size:2.25rem;line-height:1.1;margin:.25rem 0}.stats{display:flex;flex-wrap:wrap;gap:.75rem;margin:1rem 0}.stat{border:1px solid var(--line);border-radius:.65rem;padding:.7rem .9rem;min-width:8rem;background:#f8fafc}.stat strong{display:block;font-size:1.4rem}.stat span{color:var(--muted);font-size:.9rem}.page-list{columns:2;list-style:none;padding:0}.page-list li{break-inside:avoid;margin:.25rem 0}.page-toc{border:1px solid var(--line);border-radius:.65rem;background:#f8fafc;padding:.8rem 1rem;margin:0 0 1.5rem 0}.page-toc h2{font-size:.9rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:0 0 .35rem 0}.page-toc ol{margin:.25rem 0 .25rem 1.1rem;padding:0}.page-toc li{margin:.15rem 0}.page-toc a{color:#334155}"
    ".loam-document section{margin:1.25rem 0}.loam-document h1,.loam-document h2,.loam-document h3{line-height:1.25}.loam-document pre{overflow:auto;background:#0f172a;color:#e2e8f0;padding:1rem;border-radius:.5rem}.loam-document code{background:var(--code);padding:.1rem .25rem;border-radius:.25rem}.loam-document pre code{background:transparent;padding:0}.loam-document blockquote{border-left:4px solid #cbd5e1;margin-left:0;padding-left:1rem;color:#475569}.loam-document table{border-collapse:collapse}.loam-document td,.loam-document th{border:1px solid #cbd5e1;padding:.25rem .5rem}.loam-document img{max-width:100%}"
    ".backlinks{margin-top:3rem;border-top:1px solid var(--line);padding-top:1rem;color:#475569}.backlinks h2{margin-bottom:.25rem}.backlinks p{color:var(--muted);margin-top:0}.backlinks ul{padding-left:1.2rem}.backlinks li{margin:.35rem 0}.backlinks small{display:block;color:var(--muted)}.page-meta{color:var(--muted);font-size:.9rem;margin:-.5rem 0 1.5rem 0}.graph-link{display:inline-block;margin-left:.5rem}"
    "@media(max-width:900px){.site-shell{display:block}.site-nav{position:static;height:auto}.site-main{padding:1.25rem}.page-list{columns:1}}"))
@@ -49,6 +49,20 @@
                   :title (:page-title page)
                   :aria-current (when (= current-url (:page-url page)) "page")}
                  (:page-title page)]])]])]))
+
+(defn toc-list [items]
+  (when (seq items)
+    [:ol
+     (for [{:keys [title href children]} items]
+       [:li
+        [:a {:href href} title]
+        (toc-list children)])]))
+
+(defn page-toc [ctx document]
+  (when-let [items (seq (get-in ctx [:index :toc (:source document)]))]
+    [:nav.page-toc {:aria-label "Table of contents"}
+     [:h2 "Contents"]
+     (toc-list items)]))
 
 (defn backlinks [ctx document]
   (let [idx (:index ctx)
@@ -101,6 +115,7 @@
         [:div.page-meta
          (or (:source-rel document) (:source document))
          [:a.graph-link {:href (route/asset-url page-url "/graph.json")} "graph.json"]]
+        (page-toc ctx document)
         rendered
         (backlinks ctx document)]]]]))
 

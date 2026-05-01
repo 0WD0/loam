@@ -105,7 +105,7 @@ loam.site/build-site!
 
 - =index.html=：首页，包含分组侧边栏和搜索框
 - =notes/<slug>/index.html=：每个 EDN 文档对应一个页面
-- =index.edn=：公开的导航、目录、链接、反链、搜索、图谱索引数据
+- =index.edn=：公开的导航、文件夹分组、标题目录、链接、反链、搜索、图谱索引数据
 - =search-index.json=：浏览器搜索使用的 JSON 数据
 - =graph.edn= 和 =graph.json=：图谱节点和边
 - =assets/site.css= 和 =assets/search.js=：默认主题资产
@@ -116,7 +116,9 @@ loam.site/build-site!
 - =assets/tree-sitter/**=：Tree-sitter runtime、WASM、query、license 文件
 - =public/**=：用户静态文件，构建时复制到输出目录根部
 
-目录由 =loam.directory= 扩展建立。页面侧边栏会消费目录索引并按 EDN 相对目录分组。例如 =daily/*.edn= 会出现在 =daily= 分组下，根目录文档会出现在默认 =notes= 分组下。
+文件夹分组由 =loam.directory= 扩展建立。页面侧边栏会消费 =:directories= 索引并按 EDN 相对目录分组。例如 =daily/*.edn= 会出现在 =daily= 分组下，根目录文档会出现在默认 =notes= 分组下。
+
+页面内标题目录由 =loam.toc= 扩展建立。默认 theme 会在正文前渲染当前页面的 headline 层级目录。
 
 * 目录和资产约定
 
@@ -191,7 +193,8 @@ Loam 被拆成小的、可替换的层：
 | =loam.json= | 最小 JSON 序列化 |
 | =loam.search= | 搜索索引扩展 |
 | =loam.graph= | 图谱数据扩展 |
-| =loam.directory= | 目录索引扩展，把页面按 EDN 相对目录分组 |
+| =loam.directory= | 文件夹分组索引扩展，把页面按 EDN 相对目录分组 |
+| =loam.toc= | 标题目录扩展，为每个页面建立 headline 层级目录 |
 | =loam.head= | extension 注入 =<head>= 的辅助函数 |
 | =loam.theme.default= | 默认布局、分组侧边栏、搜索 UI、主题 CSS/JS |
 | =loam.highlight.treesitter.wasm= | src block Tree-sitter WASM 高亮扩展 |
@@ -211,7 +214,7 @@ Loam 被拆成小的、可替换的层：
 
 * System 和 Extension
 
-Loam 的运行配置叫 system。默认系统由 =loam.defaults/create-system= 创建，它会安装默认渲染器、高亮 provider、搜索、图谱、目录索引和默认主题。默认高亮 provider 是 Tree-sitter。
+Loam 的运行配置叫 system。默认系统由 =loam.defaults/create-system= 创建，它会安装默认渲染器、高亮 provider、搜索、图谱、文件夹分组、标题目录和默认主题。默认高亮 provider 是 Tree-sitter。
 
 #+begin_src clojure
 (require '[loam.defaults :as loam])
@@ -306,9 +309,9 @@ Extension 按顺序 fold。每个 target 自己决定如何 compose/extend：例
 
 如果你想用自定义高亮 extension，可以直接把它放到 =:highlight= 里，或者把 =:highlight= 设为 =:none= 后自己安装相关扩展。
 
-* 目录扩展
+* 文件夹分组扩展
 
-目录不是 theme 里的硬编码分组，而是一个普通 index extension：
+侧边栏的文件夹分组不是 theme 里的硬编码逻辑，而是一个普通 index extension：
 
 #+begin_src clojure
 (require '[loam.directory :as directory])
@@ -331,7 +334,36 @@ Extension 按顺序 fold。每个 target 自己决定如何 compose/extend：例
   :pages [...]}]
 #+end_src
 
-默认 theme 的侧边栏只消费这个目录索引；如果以后要做目录页、目录 RSS、目录权限或目录级配置，可以继续扩展 =loam.directory=，不用污染 theme。
+默认 theme 的侧边栏只消费这个文件夹分组索引；如果以后要做目录页、目录 RSS、目录权限或目录级配置，可以继续扩展 =loam.directory=，不用污染 theme。
+
+* 标题目录扩展
+
+标题目录是另一个普通 index extension：
+
+#+begin_src clojure
+(require '[loam.toc :as toc])
+
+(def system
+  (loam/create-system
+   {:extensions [toc/extension]}))
+#+end_src
+
+默认系统已经安装 =loam.toc/extension=。它会读取每个页面的 =headline= 层级，在 index 中写入 =:toc=：
+
+#+begin_src clojure
+{"/path/to/page.edn"
+ [{:level 1
+   :title "Intro"
+   :href "/notes/page#intro"
+   :anchor-id "intro"
+   :children [{:level 2
+               :title "Install"
+               :href "/notes/page#install"
+               :anchor-id "install"
+               :children []}]}]}
+#+end_src
+
+默认 theme 会在页面正文前渲染当前页面的标题目录。目录链接使用 Loam 统一 anchor 规则，因此和实际 headline HTML id 保持一致。
 
 * 前端扩展和 npm 生态
 
