@@ -167,6 +167,33 @@
           (str index)))
       "unknown"))
 
+(def capture-priority
+  {"keyword" 0
+   "function" 1
+   "function.call" 2
+   "method" 2
+   "method.call" 2
+   "type" 3
+   "type.builtin" 3
+   "constant" 4
+   "constant.builtin" 4
+   "string" 5
+   "string.special" 5
+   "number" 5
+   "boolean" 5
+   "operator" 6
+   "punctuation" 7
+   "punctuation.bracket" 7
+   "punctuation.delimiter" 7
+   "punctuation.special" 7
+   "variable.parameter" 8
+   "parameter" 8
+   "variable" 9
+   "comment" 10})
+
+(defn capture-rank [capture]
+  (get capture-priority (str capture) 100))
+
 (defn normalize-ranges [captures query]
   (let [ranges (->> captures
                     (keep (fn [capture]
@@ -177,7 +204,7 @@
                                 {:start start
                                  :end end
                                  :capture (capture-name capture query)}))))
-                    (sort-by (juxt :start (comp - :end) :capture)))]
+                    (sort-by (juxt :start (comp - :end) (comp capture-rank :capture) :capture)))]
     (loop [remaining ranges
            cursor 0
            accepted []]
