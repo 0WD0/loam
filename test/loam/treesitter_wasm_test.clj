@@ -31,10 +31,7 @@
     (is (contains? (:assets ext) "assets/loam-treesitter.css"))
     (is (contains? (:assets ext) "assets/loam-treesitter.js"))
     (is (= manifest (get-in ext [:assets "assets/loam-treesitter.json"])))
-    (is (contains? (:asset-files ext) "assets/tree-sitter/tree-sitter.js"))
-    (is (contains? (:asset-files ext) "assets/tree-sitter/tree-sitter.wasm"))
-    (is (contains? (:asset-files ext) "assets/tree-sitter/languages/tree-sitter-clojure.wasm"))
-    (is (contains? (:asset-files ext) "assets/tree-sitter/queries/clojure/highlights.scm"))
+    (is (nil? (:asset-files ext)))
     (is (= [[:link {:rel "stylesheet" :href "../../assets/loam-treesitter.css"}]
             [:script {:src "../../assets/loam-treesitter.js"
                       :type "module"

@@ -3,3 +3,4 @@ build/
 .lsp/.cache/
 target/
 node_modules/
+public/assets/tree-sitter/

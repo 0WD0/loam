@@ -4,8 +4,10 @@
   "private": true,
   "packageManager": "npm@11.12.1",
   "scripts": {
+    "prepare-assets": "node scripts/copy-tree-sitter-assets.mjs",
+    "postinstall": "npm run prepare-assets",
     "test": "bb test",
-    "site": "bb -cp src -m loam.site"
+    "site": "npm run prepare-assets && bb -cp src -m loam.site"
   },
   "dependencies": {
     "@vscode/tree-sitter-wasm": "0.3.1",

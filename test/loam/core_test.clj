@@ -8,7 +8,6 @@
            :inline-types #{:x}
            :indexers [(fn [idx _] (assoc idx :a true))]
            :assets {"a.css" "a"}
-           :asset-files {"a.js" "/tmp/a.js"}
            :head [[:meta {:name "a"}]]
            :layouts {:page :a}
            :hooks {:site/built [(fn [event] (assoc event :a true))]}}
@@ -16,7 +15,6 @@
            :renderers {:paragraph (fn [_ _] [:b])}
            :inline-types #{:y}
            :assets {"b.css" "b"}
-           :asset-files {"b.js" "/tmp/b.js"}
            :head [[:meta {:name "b"}]]
            :layouts {:page :b}
            :hooks {:site/built [(fn [event] (assoc event :b true))]}}
@@ -25,7 +23,6 @@
     (is (= #{:x :y} (:inline-types system)))
     (is (= :b (get-in system [:layouts :page])))
     (is (= #{"a.css" "b.css"} (set (keys (:assets system)))))
-    (is (= {"a.js" "/tmp/a.js" "b.js" "/tmp/b.js"} (:asset-files system)))
     (is (= [[:meta {:name "a"}] [:meta {:name "b"}]] (:head system)))
     (is (= {:a true :b true}
            (loam/emit-hook system :site/built {})))))

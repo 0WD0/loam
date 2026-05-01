@@ -13,8 +13,9 @@
 (def default-languages
   "Default language manifest.
 
-  The referenced files are copied from npm packages listed in package.json.
-  Pass a custom :languages map to `extension` to add or replace languages."
+  Matching runtime/parser/query files expected under `public/assets/tree-sitter`.
+  Use `npm run prepare-assets` to sync defaults from node_modules. Pass custom
+  :languages map to `extension` to add or replace languages."
   {:clojure {:aliases ["clj" "cljs" "cljc" "edn"]
              :wasm "/assets/tree-sitter/languages/tree-sitter-clojure.wasm"
              :query "/assets/tree-sitter/queries/clojure/highlights.scm"}
@@ -252,42 +253,6 @@
 })();
 ")
 
-(def npm-asset-files
-  {"assets/tree-sitter/tree-sitter.js"
-   "node_modules/web-tree-sitter/web-tree-sitter.js"
-   "assets/tree-sitter/tree-sitter.wasm"
-   "node_modules/web-tree-sitter/web-tree-sitter.wasm"
-
-   "assets/tree-sitter/languages/tree-sitter-clojure.wasm"
-   "node_modules/@yogthos/tree-sitter-clojure/tree-sitter-clojure.wasm"
-   "assets/tree-sitter/languages/tree-sitter-javascript.wasm"
-   "node_modules/@vscode/tree-sitter-wasm/wasm/tree-sitter-javascript.wasm"
-   "assets/tree-sitter/languages/tree-sitter-typescript.wasm"
-   "node_modules/@vscode/tree-sitter-wasm/wasm/tree-sitter-typescript.wasm"
-   "assets/tree-sitter/languages/tree-sitter-python.wasm"
-   "node_modules/@vscode/tree-sitter-wasm/wasm/tree-sitter-python.wasm"
-
-   "assets/tree-sitter/queries/clojure/highlights.scm"
-   "node_modules/@yogthos/tree-sitter-clojure/queries/highlights.scm"
-   "assets/tree-sitter/queries/javascript/highlights.scm"
-   "node_modules/tree-sitter-javascript/queries/highlights.scm"
-   "assets/tree-sitter/queries/typescript/highlights.scm"
-   "node_modules/tree-sitter-typescript/queries/highlights.scm"
-   "assets/tree-sitter/queries/python/highlights.scm"
-   "node_modules/tree-sitter-python/queries/highlights.scm"
-
-   "assets/tree-sitter/licenses/web-tree-sitter-MIT.txt"
-   "node_modules/web-tree-sitter/LICENSE"
-   "assets/tree-sitter/licenses/vscode-tree-sitter-wasm-MIT.txt"
-   "node_modules/@vscode/tree-sitter-wasm/LICENSE"
-   "assets/tree-sitter/licenses/tree-sitter-clojure.txt"
-   "node_modules/@yogthos/tree-sitter-clojure/COPYING.txt"
-   "assets/tree-sitter/licenses/tree-sitter-javascript-MIT.txt"
-   "node_modules/tree-sitter-javascript/LICENSE"
-   "assets/tree-sitter/licenses/tree-sitter-typescript-MIT.txt"
-   "node_modules/tree-sitter-typescript/LICENSE"
-   "assets/tree-sitter/licenses/tree-sitter-python-MIT.txt"
-   "node_modules/tree-sitter-python/LICENSE"})
 
 (defn manifest [opts]
   {:runtime (or (:runtime opts) "/assets/tree-sitter/tree-sitter.js")
@@ -318,5 +283,4 @@
     :head [(head-tags opts)]
     :assets {"assets/loam-treesitter.css" css
              "assets/loam-treesitter.js" js
-             "assets/loam-treesitter.json" (json/render-json (manifest opts))}
-    :asset-files (merge npm-asset-files (:asset-files opts))}))
+             "assets/loam-treesitter.json" (json/render-json (manifest opts))}}))

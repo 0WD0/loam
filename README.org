@@ -18,6 +18,7 @@ It consumes structured EDN documents, usually produced by =ox-edn=, and turns th
 npm install
 bb test
 
+npm run prepare-assets
 bb -cp src -m loam.site \
   --edn-dir /path/to/edn \
   --output-dir build/site \
@@ -49,7 +50,8 @@ The default static build emits:
 - =search-index.json=: browser-friendly search data
 - =graph.edn= and =graph.json=: graph nodes and edges
 - =assets/site.css= and =assets/search.js=: default theme assets
-- =assets/loam-treesitter.*= and =assets/tree-sitter/**=: default Tree-sitter highlighter assets
+- =assets/loam-treesitter.*=: default Tree-sitter highlighter assets
+- =public/**=: user/static assets copied into output root
 
 The sidebar groups pages by EDN relative directory, so =daily/*.edn= and other subtrees become sections automatically.
 
@@ -90,7 +92,6 @@ Extensions are plain maps:
  :indexers [(fn [index documents] ...)]
  :layouts {:page (fn [ctx document] ...)}
  :assets {"assets/theme.css" "body { ... }"}
- :asset-files {"assets/logo.svg" "resources/logo.svg"}
  :head [(fn [ctx current-url]
           [[:link {:rel "stylesheet" :href "/assets/theme.css"}]])]
  :hooks {:site/built [(fn [event] event)]}}
@@ -129,29 +130,29 @@ The extension:
 - writes =assets/loam-treesitter.css=
 - writes =assets/loam-treesitter.js=
 - writes =assets/loam-treesitter.json= language manifest
-- copies Tree-sitter runtime/parser/query assets from npm packages through Loam's =:asset-files= extension point
 - injects its CSS and module script through Loam's =:head= extension point
 
-Install npm dependencies before building a site with the default Tree-sitter extension:
+Install npm deps, then sync public assets:
 
 #+begin_src bash
 npm install
+npm run prepare-assets
 #+end_src
 
-The generated site receives assets copied from =node_modules=:
+Tree-sitter runtime/parser/query assets copied into =public/assets/tree-sitter= from npm packages. Site build copies =public/= into output root automatically.
 
 #+begin_example
-assets/tree-sitter/tree-sitter.js                         <- web-tree-sitter
-assets/tree-sitter/tree-sitter.wasm                       <- web-tree-sitter
-assets/tree-sitter/languages/tree-sitter-clojure.wasm     <- @yogthos/tree-sitter-clojure
-assets/tree-sitter/languages/tree-sitter-javascript.wasm  <- @vscode/tree-sitter-wasm
-assets/tree-sitter/languages/tree-sitter-typescript.wasm  <- @vscode/tree-sitter-wasm
-assets/tree-sitter/languages/tree-sitter-python.wasm      <- @vscode/tree-sitter-wasm
-assets/tree-sitter/queries/*/highlights.scm               <- grammar npm packages
-assets/tree-sitter/licenses/*.txt                         <- npm package licenses
+public/assets/tree-sitter/tree-sitter.js
+public/assets/tree-sitter/tree-sitter.wasm
+public/assets/tree-sitter/languages/tree-sitter-clojure.wasm
+public/assets/tree-sitter/languages/tree-sitter-javascript.wasm
+public/assets/tree-sitter/languages/tree-sitter-typescript.wasm
+public/assets/tree-sitter/languages/tree-sitter-python.wasm
+public/assets/tree-sitter/queries/*/highlights.scm
+public/assets/tree-sitter/licenses/*.txt
 #+end_example
 
-Keep =web-tree-sitter= and language WASM ABI versions compatible when replacing or adding grammars.
+Need custom grammar? Replace files in =public/assets/tree-sitter= or pass custom =:languages= map. Keep =web-tree-sitter= and language WASM ABI versions compatible.
 
 * Examples
 

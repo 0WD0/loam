@@ -46,6 +46,14 @@
   (ensure-dir! (.getParentFile (io/file to)))
   (io/copy (io/file from) (io/file to)))
 
+(defn copy-public-dir! [public-dir output-dir]
+  (let [public-dir (io/file public-dir)]
+    (when (.exists public-dir)
+      (doseq [file (file-seq public-dir)
+              :when (.isFile file)]
+        (let [rel (relative-path public-dir file)]
+          (copy-file! file (.getPath (io/file output-dir rel))))))))
+
 (defn public-index [idx]
   (select-keys idx [:pages :ids :custom-ids :titles :targets :links :backlinks :search/documents :graph]))
 
@@ -55,10 +63,6 @@
 (defn write-assets! [output-dir assets]
   (doseq [[path content] assets]
     (write-file! (.getPath (io/file output-dir path)) content)))
-
-(defn write-asset-files! [output-dir asset-files]
-  (doseq [[path source] asset-files]
-    (copy-file! source (.getPath (io/file output-dir path)))))
 
 (defn write-index! [output-dir idx]
   (write-file! (.getPath (io/file output-dir "index.edn"))
@@ -80,10 +84,12 @@
   Optional opts:
   - :url-prefix default /notes/
   - :site-title default Loam
+  - :public-dir default public/
   - :extensions extension maps"
   [opts]
   (let [edn-dir (:edn-dir opts)
         output-dir (:output-dir opts)
+        public-dir (or (:public-dir opts) "public")
         system (defaults/create-system (merge {:url-prefix "/notes/"} opts))
         files (edn-files edn-dir)
         documents (map #(read-document edn-dir %) files)
@@ -92,8 +98,8 @@
         home-layout (get-in system [:layouts :home])
         page-layout (get-in system [:layouts :page])]
     (ensure-dir! output-dir)
+    (copy-public-dir! public-dir output-dir)
     (write-assets! output-dir (:assets system))
-    (write-asset-files! output-dir (:asset-files system))
     (write-file! (.getPath (io/file output-dir "index.html"))
                  (html/document (home-layout ctx)))
     (doseq [document (:documents idx)]

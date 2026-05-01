@@ -17,6 +17,7 @@ test: node_modules/.package-lock
 	$(BB) test
 
 site: node_modules/.package-lock
+	$(NPM) run prepare-assets
 	$(BB) -cp src -m loam.site \
 	  --edn-dir "$(EDN_DIR)" \
 	  --output-dir "$(SITE_DIR)" \

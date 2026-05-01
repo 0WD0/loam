@@ -20,16 +20,16 @@
   (let [root (temp-dir)
         edn-dir (io/file root "edn")
         out-dir (io/file root "site")
-        copied-asset (io/file root "copied-source.txt")]
+        public-dir (io/file root "public")]
     (.mkdirs edn-dir)
-    (spit copied-asset "copied asset")
+    (.mkdirs (io/file public-dir "assets"))
+    (spit (io/file public-dir "assets" "copied.txt") "copied asset")
     (write-edn! edn-dir "a.edn" fixtures/doc-a)
     (write-edn! edn-dir "daily/b.edn" fixtures/doc-b)
     (let [summary (site/build-site! {:edn-dir (.getPath edn-dir)
                                      :output-dir (.getPath out-dir)
-                                     :site-title "Test Loam"
-                                     :extensions [{:id :test/asset-files
-                                                   :asset-files {"assets/copied.txt" (.getPath copied-asset)}}]})
+                                     :public-dir (.getPath public-dir)
+                                     :site-title "Test Loam"})
           home (slurp (io/file out-dir "index.html"))
           page-a (slurp (io/file out-dir "notes" "a" "index.html"))
           public-index (edn/read-string (slurp (io/file out-dir "index.edn")))
