@@ -1,6 +1,7 @@
 (ns loam.index
   "Build navigation indexes from Loam documents."
-  (:require [loam.ast :as ast]
+  (:require [loam.anchor :as anchor]
+            [loam.ast :as ast]
             [loam.route :as route]
             [clojure.string :as str]
             #?(:clj [clojure.edn :as edn])))
@@ -34,7 +35,8 @@
 (defn node-entry [document node]
   (let [p (ast/props node)
         type (:type node)
-        anchor (ast/node-anchor node)]
+        anchor (anchor/node-anchor-value node)
+        anchor-id (anchor/node-anchor-id node)]
     {:type type
      :source (:source document)
      :source-rel (:source-rel document)
@@ -47,7 +49,10 @@
      :value (:value p)
      :title (ast/node-title node)
      :anchor anchor
-     :href (route/href (:url document) (when (not= type :org-data) anchor))}))
+     :anchor-id anchor-id
+     :href (if (and (not= type :org-data) anchor-id)
+             (str (:url document) "#" anchor-id)
+             (:url document))}))
 
 (defn page-entry [document]
   {:type :org-data
@@ -60,6 +65,7 @@
    :id (:id document)
    :title (:title document)
    :anchor (:id document)
+   :anchor-id (anchor/anchor-id :id (:id document))
    :href (:url document)})
 
 (defn- index-entry [idx entry]

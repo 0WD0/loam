@@ -1,6 +1,7 @@
 (ns loam.render
   "Registry-based AST to Hiccup renderer."
   (:require [clojure.string :as str]
+            [loam.anchor :as anchor]
             [loam.ast :as ast]))
 
 (declare render-node render-inline render-block)
@@ -27,27 +28,15 @@
   (remove nil? xs))
 
 (defn target-id [node]
-  (let [p (ast/props node)]
-    (or (:ID p)
-        (:CUSTOM_ID p)
-        (:value p)
-        (:raw-value p))))
-
-(defn- resolved-fragment [link-props]
-  (let [{:keys [resolved-id resolved-custom-id resolved-value]} (:resolved link-props)]
-    (or resolved-id resolved-custom-id resolved-value)))
-
-(defn- fragment-href [fragment]
-  (some-> fragment str (str/replace #"\s+" "-") (->> (str "#"))))
+  (anchor/node-anchor-id node))
 
 (defn default-link-href [link-props]
   (let [{:keys [type path raw-link]} link-props]
-    (or (fragment-href (resolved-fragment link-props))
+    (or (anchor/local-href link-props)
         (case type
           ("http" "https" "ftp") (str type ":" path)
           "file" path
           "attachment" raw-link
-          ("id" "custom-id" "fuzzy" "radio") (fragment-href path)
           raw-link))))
 
 (defn link-href [ctx link-props]
