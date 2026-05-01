@@ -61,27 +61,36 @@
    ".ts-comment{color:#7f848e;font-style:italic}.ts-keyword,.ts-keyword-return,.ts-keyword-function,.ts-keyword-conditional,.ts-keyword-repeat,.ts-keyword-operator{color:#c678dd}.ts-function,.ts-function-call,.ts-method,.ts-method-call{color:#61afef}.ts-variable{color:#e5c07b}.ts-variable-parameter,.ts-parameter{color:#d19a66}.ts-type,.ts-type-builtin{color:#56b6c2}.ts-string,.ts-string-special{color:#98c379}.ts-string-escape{color:#56b6c2}.ts-number,.ts-boolean,.ts-constant,.ts-constant-builtin{color:#d19a66}.ts-operator{color:#56b6c2}.ts-property,.ts-attribute{color:#e06c75}.ts-punctuation,.ts-punctuation-bracket,.ts-punctuation-delimiter,.ts-punctuation-special{color:#abb2bf}.ts-tag{color:#e06c75}"))
 
 (defn manifest [opts]
-  {:runtime (or (:runtime opts) "/assets/tree-sitter/tree-sitter.js")
-   :runtime-wasm (or (:runtime-wasm opts) "/assets/tree-sitter/tree-sitter.wasm")
+  {:runtime-wasm (or (:runtime-wasm opts) "/assets/tree-sitter/tree-sitter.wasm")
    :languages (or (:languages opts) default-languages)})
+
+(defn runtime-loader-js [opts]
+  (let [runtime (or (:runtime opts) "./tree-sitter.js")
+        runtime-global (or (:runtime-global opts) "LoamTreeSitter")]
+    (str "import * as runtime from " (json/render-json runtime) ";\n"
+         "globalThis[" (json/render-json runtime-global) "] = runtime;\n"
+         "globalThis.dispatchEvent(new CustomEvent('loam:tree-sitter-runtime', {detail: runtime}));\n")))
 
 (defn head-tags [opts]
   (fn [_ctx current-url]
-    [(head/stylesheet current-url "/assets/loam-treesitter.css")
-     (head/script current-url "/assets/treesitter.js"
-                  {:defer true
-                   :data-config (head/asset-url current-url "/assets/loam-treesitter.json")
-                   :data-runtime (head/asset-url current-url (or (:runtime opts)
-                                                                 "/assets/tree-sitter/tree-sitter.js"))
-                   :data-runtime-wasm (head/asset-url current-url (or (:runtime-wasm opts)
-                                                                      "/assets/tree-sitter/tree-sitter.wasm"))})]))
+    (let [runtime-global (or (:runtime-global opts) "LoamTreeSitter")]
+      [(head/stylesheet current-url "/assets/loam-treesitter.css")
+       (head/script current-url "/assets/tree-sitter/loam-runtime.js"
+                    {:type "module"})
+       (head/script current-url "/assets/treesitter.js"
+                    {:defer true
+                     :data-config (head/asset-url current-url "/assets/loam-treesitter.json")
+                     :data-runtime-global runtime-global
+                     :data-runtime-wasm (head/asset-url current-url (or (:runtime-wasm opts)
+                                                                        "/assets/tree-sitter/tree-sitter.wasm"))})])))
 
 (defn extension
   "Create the Tree-sitter/WASM highlighter extension.
 
   Options:
   - :languages map of language name -> {:aliases [...] :wasm URL :query URL}
-  - :runtime URL to web-tree-sitter JS module asset
+  - :runtime ESM import specifier for web-tree-sitter JS module
+  - :runtime-global global name published by runtime loader
   - :runtime-wasm URL to web-tree-sitter runtime WASM asset"
   ([] (extension {}))
   ([opts]
@@ -89,4 +98,5 @@
     :renderers {:src-block render-src-block}
     :head [(head-tags opts)]
     :assets {"assets/loam-treesitter.css" css
-             "assets/loam-treesitter.json" (json/render-json (manifest opts))}}))
+             "assets/loam-treesitter.json" (json/render-json (manifest opts))
+             "assets/tree-sitter/loam-runtime.js" (runtime-loader-js opts)}}))

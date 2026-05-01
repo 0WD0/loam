@@ -49,7 +49,7 @@ The default static build emits:
 - =assets/site.css= and =assets/search.js=: default theme assets
 - =assets/loam-treesitter.css= and =assets/loam-treesitter.json=: default Tree-sitter CSS/manifest
 - =assets/treesitter.js=: shadow-cljs-built Tree-sitter browser client
-- =assets/tree-sitter/**=: Tree-sitter WASM/query assets copied from =public/=
+- =assets/tree-sitter/**=: Tree-sitter runtime loader, WASM, and query assets
 - =public/**=: static assets copied into output root
 
 The sidebar groups pages by EDN relative directory, so =daily/*.edn= and other subtrees become sections automatically.
@@ -128,9 +128,9 @@ The extension:
 - overrides =:src-block= rendering with =data-loam-treesitter= markers
 - writes =assets/loam-treesitter.css=
 - writes =assets/loam-treesitter.json= language manifest
-- injects CSS plus =assets/treesitter.js= through Loam's =:head= extension point
+- injects CSS, =assets/tree-sitter/loam-runtime.js=, and =assets/treesitter.js= through Loam's =:head= extension point
 
-The browser client lives in =src/loam/highlight/treesitter/client.cljs= and compiles with =shadow-cljs= to =public/assets/treesitter.js=. =npm run prepare-assets= also copies Tree-sitter WASM/query assets from npm packages into =public/assets/tree-sitter=.
+The browser client lives in =src/loam/highlight/treesitter/client.cljs= and compiles with =shadow-cljs= to =public/assets/treesitter.js=. The extension emits a CSP-friendly ESM loader at =assets/tree-sitter/loam-runtime.js=, and =npm run prepare-assets= copies Tree-sitter runtime/WASM/query assets from npm packages into =public/assets/tree-sitter=.
 
 #+begin_src bash
 npm install
@@ -141,6 +141,7 @@ Site build copies =public/= into output root automatically.
 
 #+begin_example
 public/assets/treesitter.js
+assets/tree-sitter/loam-runtime.js
 public/assets/tree-sitter/tree-sitter.js
 public/assets/tree-sitter/tree-sitter.wasm
 public/assets/tree-sitter/languages/tree-sitter-clojure.wasm
@@ -151,7 +152,7 @@ public/assets/tree-sitter/queries/*/highlights.scm
 public/assets/tree-sitter/licenses/*.txt
 #+end_example
 
-Need custom grammar? Replace files in =public/assets/tree-sitter= or pass custom =:languages= map. Keep =web-tree-sitter= and language WASM ABI versions compatible.
+Need custom grammar? Replace files in =public/assets/tree-sitter= or pass custom =:languages= map. Need custom runtime? Pass =:runtime= as an ESM import specifier for the loader. Keep =web-tree-sitter= and language WASM ABI versions compatible.
 
 * Examples
 

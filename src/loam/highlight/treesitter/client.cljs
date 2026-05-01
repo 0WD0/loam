@@ -4,11 +4,9 @@
             [goog.object :as gobj]))
 
 (def default-config-url "/assets/loam-treesitter.json")
-(def default-runtime-url "/assets/tree-sitter/tree-sitter.js")
+(def default-runtime-global "LoamTreeSitter")
 (def default-runtime-wasm-url "/assets/tree-sitter/tree-sitter.wasm")
-
-(def dynamic-import
-  (js/Function. "url" "return import(url);"))
+(def runtime-ready-event "loam:tree-sitter-runtime")
 
 (defn script-data [key]
   (some-> js/document
@@ -19,8 +17,8 @@
 (def config-url
   (or (script-data "config") default-config-url))
 
-(def runtime-data
-  (script-data "runtime"))
+(def runtime-global
+  (or (script-data "runtimeGlobal") default-runtime-global))
 
 (def runtime-wasm-data
   (script-data "runtimeWasm"))
@@ -70,33 +68,57 @@
 
 (defn fetch-json [url]
   (-> (js/fetch (asset-url url))
-      (.then (fn [res]
-               (if (.-ok res)
-                 (.json res)
-                 (throw (js/Error. (str "failed to load " url ": " (.-status res)))))))
+      (.then (fn [response]
+               (if (.-ok response)
+                 (.json response)
+                 (throw (js/Error. (str "failed to load " url ": " (.-status response)))))))
       (.then (fn [value]
                (js->clj value :keywordize-keys true)))))
 
 (defn fetch-text [url]
   (-> (js/fetch (asset-url url))
-      (.then (fn [res]
-               (if (.-ok res)
-                 (.text res)
-                 (throw (js/Error. (str "failed to load " url ": " (.-status res)))))))))
+      (.then (fn [response]
+               (if (.-ok response)
+                 (.text response)
+                 (throw (js/Error. (str "failed to load " url ": " (.-status response)))))))))
 
-(defn import-runtime [url]
-  (-> (dynamic-import (asset-url url))
-      (.then (fn [mod]
-               (let [Parser (or (gobj/get mod "Parser")
-                                (gobj/get mod "default")
-                                mod)
-                     Language (or (gobj/get mod "Language")
-                                  (gobj/get Parser "Language"))
-                     Query (or (gobj/get mod "Query")
-                               (gobj/get Parser "Query"))]
-                 {:parser Parser
-                  :language Language
-                  :query Query})))))
+(defn runtime-value []
+  (gobj/get js/globalThis runtime-global))
+
+(defn wait-runtime []
+  (if-let [runtime (runtime-value)]
+    (.resolve js/Promise runtime)
+    (js/Promise.
+     (fn [resolve reject]
+       (let [handler* (atom nil)
+             timeout-id (.setTimeout js/window
+                                     (fn []
+                                       (when-let [handler @handler*]
+                                         (.removeEventListener js/window runtime-ready-event handler))
+                                       (reject (js/Error. "tree-sitter runtime not loaded")))
+                                     10000)
+             handler (fn [event]
+                       (let [runtime (or (runtime-value)
+                                         (gobj/get event "detail"))]
+                         (when runtime
+                           (.clearTimeout js/window timeout-id)
+                           (when-let [handler @handler*]
+                             (.removeEventListener js/window runtime-ready-event handler))
+                           (resolve runtime))))]
+         (reset! handler* handler)
+         (.addEventListener js/window runtime-ready-event handler))))))
+
+(defn runtime-api [runtime]
+  (let [Parser (or (gobj/get runtime "Parser")
+                   (gobj/get runtime "default")
+                   runtime)
+        Language (or (gobj/get runtime "Language")
+                     (gobj/get Parser "Language"))
+        Query (or (gobj/get runtime "Query")
+                  (gobj/get Parser "Query"))]
+    {:parser Parser
+     :language Language
+     :query Query}))
 
 (defn init-runtime! [runtime runtime-wasm-url]
   (let [Parser (:parser runtime)]
@@ -241,23 +263,21 @@
         (set-status! code-el "loading" nil))
       (-> (fetch-json config-url)
           (.then (fn [manifest]
-                   (let [runtime-url (or runtime-data
-                                         (:runtime manifest)
-                                         default-runtime-url)
-                         runtime-wasm-url (or runtime-wasm-data
+                   (let [runtime-wasm-url (or runtime-wasm-data
                                               (:runtime-wasm manifest)
                                               default-runtime-wasm-url)]
-                     (-> (import-runtime runtime-url)
+                     (-> (wait-runtime)
                          (.then (fn [runtime]
-                                  (-> (init-runtime! runtime runtime-wasm-url)
-                                      (.then (fn []
-                                               (let [highlighters (js/Map.)]
-                                                 (reduce (fn [promise code-el]
-                                                           (.then promise
-                                                                  (fn [_]
-                                                                    (highlight-block! runtime manifest highlighters code-el))))
-                                                         (.resolve js/Promise nil)
-                                                         blocks)))))))))))
+                                  (let [runtime (runtime-api runtime)]
+                                    (-> (init-runtime! runtime runtime-wasm-url)
+                                        (.then (fn []
+                                                 (let [highlighters (js/Map.)]
+                                                   (reduce (fn [promise code-el]
+                                                             (.then promise
+                                                                    (fn [_]
+                                                                      (highlight-block! runtime manifest highlighters code-el))))
+                                                           (.resolve js/Promise nil)
+                                                           blocks))))))))))))
           (.catch (fn [error]
                     (.error js/console "[loam-treesitter]" error)
                     (doseq [code-el blocks]
