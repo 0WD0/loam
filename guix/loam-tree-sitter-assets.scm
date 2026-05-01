@@ -1,0 +1,461 @@
+(use-modules (gnu packages base)
+             (gnu packages bash)
+             (gnu packages bootstrap)
+             (gnu packages compression)
+             (gnu packages elf)
+             (gnu packages gcc)
+             (guix build-system trivial)
+             (guix download)
+             (guix git-download)
+             ((guix licenses) #:prefix license:)
+             (guix packages))
+
+(define tree-sitter-version "0.26.8")
+(define wasi-sdk-version "29.0")
+
+(define tree-sitter-javascript-commit
+  "44c892e0be055ac465d5eeddae6d3e194424e7de")
+
+(define tree-sitter-typescript-commit
+  "f975a621f4e7f532fe322e13c4f79495e0a7b2e7")
+
+(define tree-sitter-python-commit
+  "293fdc02038ee2bf0e2e206711b69c90ac0d413f")
+
+(define tree-sitter-scala-commit
+  "38950b525c9dfc44c8b60d44bdd6e54217286ca8")
+
+(define tree-sitter-clojure-commit
+  "8ec8407eada5f29728d746a46cbe6115938b5422")
+
+(define (github-source name url commit hash)
+  (origin
+    (method git-fetch)
+    (uri (git-reference
+           (url url)
+           (commit commit)))
+    (file-name (git-file-name name commit))
+    (sha256 (base32 hash))))
+
+(define tree-sitter-cli-source
+  (origin
+    (method url-fetch)
+    (uri (string-append
+          "https://github.com/tree-sitter/tree-sitter/releases/download/v"
+          tree-sitter-version "/tree-sitter-cli-linux-x64.zip"))
+    (sha256
+     (base32 "0nx8s15nva51zqj4r0qm01idszvw11119dfjwzf0b3pfg4sdhxwk"))))
+
+(define web-tree-sitter-source
+  (origin
+    (method url-fetch)
+    (uri (string-append
+          "https://github.com/tree-sitter/tree-sitter/releases/download/v"
+          tree-sitter-version "/web-tree-sitter.tar.gz"))
+    (sha256
+     (base32 "0cwz6gmch9r4jnlhrdy8k1la3nxjh1bw10yazdp3bjcxf8nswsha"))))
+
+(define tree-sitter-license-source
+  (origin
+    (method url-fetch)
+    (uri (string-append
+          "https://raw.githubusercontent.com/tree-sitter/tree-sitter/v"
+          tree-sitter-version "/LICENSE"))
+    (sha256
+     (base32 "0y7w2jgv65aqif3805nrjcknsy57s0s7i6dsyi2j1dxn88qb9ky5"))))
+
+(define wasi-sdk-source
+  (origin
+    (method url-fetch)
+    (uri (string-append
+          "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-29/"
+          "wasi-sdk-" wasi-sdk-version "-x86_64-linux.tar.gz"))
+    (sha256
+     (base32 "0w813bywm3n87bk9bzydg207paflsgx8x5jbcbf9q4wxhyid3lc7"))))
+
+(define tree-sitter-clojure-source
+  (github-source
+   "tree-sitter-clojure"
+   "https://github.com/yogthos/tree-sitter-clojure"
+   tree-sitter-clojure-commit
+   "1syn580wdkmk980bzmxnbr55dwq3pg6q94cbwn22qgjb3vp0mx0k"))
+
+(define tree-sitter-javascript-source
+  (github-source
+   "tree-sitter-javascript"
+   "https://github.com/tree-sitter/tree-sitter-javascript"
+   tree-sitter-javascript-commit
+   "1qdjpfxw9z1icx3jc3k006yj76lcqydkvbk4ji3wk4xy854zz66q"))
+
+(define tree-sitter-typescript-source
+  (github-source
+   "tree-sitter-typescript"
+   "https://github.com/tree-sitter/tree-sitter-typescript"
+   tree-sitter-typescript-commit
+   "0rlhhqp9dv6y0iljb4bf90d89f07zkfnsrxjb6rvw985ibwpjkh9"))
+
+(define tree-sitter-python-source
+  (github-source
+   "tree-sitter-python"
+   "https://github.com/tree-sitter/tree-sitter-python"
+   tree-sitter-python-commit
+   "05kk1wlm5fgpgwqxw3m68sipkinw0gf2jq19cgq9cgp3agdwg58p"))
+
+(define tree-sitter-scala-source
+  (github-source
+   "tree-sitter-scala"
+   "https://github.com/tree-sitter/tree-sitter-scala"
+   tree-sitter-scala-commit
+   "1g4ia61ibs66qchmwnddg9x02k4ix08jvma238msv9wqb90dqx0a"))
+
+(define loam-tree-sitter-assets
+  (package
+    (name "loam-tree-sitter-assets")
+    (version "0.1.0")
+    (source #f)
+    (build-system trivial-build-system)
+    (supported-systems '("x86_64-linux"))
+    (arguments
+     (list
+      #:modules '((guix build utils)
+                  (ice-9 binary-ports)
+                  (ice-9 format)
+                  (ice-9 match)
+                  (ice-9 popen)
+                  (ice-9 rdelim)
+                  (rnrs bytevectors)
+                  (srfi srfi-1)
+                  (srfi srfi-13))
+      #:builder
+      '(begin
+          (use-modules (guix build utils)
+                       (ice-9 binary-ports)
+                       (ice-9 format)
+                       (ice-9 match)
+                       (ice-9 popen)
+                       (ice-9 rdelim)
+                       (rnrs bytevectors)
+                       (srfi srfi-1)
+                       (srfi srfi-13))
+
+          (define inputs %build-inputs)
+          (define out (assoc-ref %outputs "out"))
+          (define work (string-append (getcwd) "/work"))
+          (define assets (string-append out "/assets/tree-sitter"))
+          (define languages-dir (string-append assets "/languages"))
+          (define queries-dir (string-append assets "/queries"))
+          (define licenses-dir (string-append assets "/licenses"))
+          (define tree-sitter-version* "0.26.8")
+          (define wasi-sdk-version* "29.0")
+
+          (define grammars
+            (list
+             (cons 'clojure
+                   `((input . "grammar-clojure")
+                     (version . "0.0.14")
+                     (tag . #f)
+                     (commit . "8ec8407eada5f29728d746a46cbe6115938b5422")
+                     (source-hash . "1syn580wdkmk980bzmxnbr55dwq3pg6q94cbwn22qgjb3vp0mx0k")
+                     (repo . "https://github.com/yogthos/tree-sitter-clojure")
+                     (grammar-dir . ".")
+                     (query . "queries/highlights.scm")
+                     (license . "COPYING.txt")
+                     (license-output . "tree-sitter-clojure-CC0.txt")
+                     (aliases . ("clj" "cljs" "cljc" "edn"))
+                     (sample . "(defn foo [] :ok)\n")))
+             (cons 'javascript
+                   `((input . "grammar-javascript")
+                     (version . "0.25.0")
+                     (tag . "v0.25.0")
+                     (commit . "44c892e0be055ac465d5eeddae6d3e194424e7de")
+                     (source-hash . "1qdjpfxw9z1icx3jc3k006yj76lcqydkvbk4ji3wk4xy854zz66q")
+                     (repo . "https://github.com/tree-sitter/tree-sitter-javascript")
+                     (grammar-dir . ".")
+                     (query . "queries/highlights.scm")
+                     (license . "LICENSE")
+                     (license-output . "tree-sitter-javascript-MIT.txt")
+                     (aliases . ("js" "jsx" "node"))
+                     (sample . "const answer = 42;\n")))
+             (cons 'typescript
+                   `((input . "grammar-typescript")
+                     (version . "0.23.2")
+                     (tag . "v0.23.2")
+                     (commit . "f975a621f4e7f532fe322e13c4f79495e0a7b2e7")
+                     (source-hash . "0rlhhqp9dv6y0iljb4bf90d89f07zkfnsrxjb6rvw985ibwpjkh9")
+                     (repo . "https://github.com/tree-sitter/tree-sitter-typescript")
+                     (grammar-dir . "typescript")
+                     (query . "queries/highlights.scm")
+                     (license . "LICENSE")
+                     (license-output . "tree-sitter-typescript-MIT.txt")
+                     (aliases . ("ts"))
+                     (sample . "const answer: number = 42;\n")))
+             (cons 'python
+                   `((input . "grammar-python")
+                     (version . "0.25.0")
+                     (tag . "v0.25.0")
+                     (commit . "293fdc02038ee2bf0e2e206711b69c90ac0d413f")
+                     (source-hash . "05kk1wlm5fgpgwqxw3m68sipkinw0gf2jq19cgq9cgp3agdwg58p")
+                     (repo . "https://github.com/tree-sitter/tree-sitter-python")
+                     (grammar-dir . ".")
+                     (query . "queries/highlights.scm")
+                     (license . "LICENSE")
+                     (license-output . "tree-sitter-python-MIT.txt")
+                     (aliases . ("py"))
+                     (sample . "def answer():\n    return 42\n")))
+             (cons 'scala
+                   `((input . "grammar-scala")
+                     (version . "0.26.0")
+                     (tag . "v0.26.0")
+                     (commit . "38950b525c9dfc44c8b60d44bdd6e54217286ca8")
+                     (source-hash . "1g4ia61ibs66qchmwnddg9x02k4ix08jvma238msv9wqb90dqx0a")
+                     (repo . "https://github.com/tree-sitter/tree-sitter-scala")
+                     (grammar-dir . ".")
+                     (query . "queries/highlights.scm")
+                     (license . "LICENSE")
+                     (license-output . "tree-sitter-scala-MIT.txt")
+                     (aliases . ("sc"))
+                     (sample . "object Main extends App { println(42) }\n"))))))
+
+          (define (input-path name)
+            (or (assoc-ref inputs name)
+                (error "missing input" name)))
+
+          (define (bin name)
+            (search-input-file inputs (string-append "/bin/" name)))
+
+          (define (set-build-path!)
+            (setenv
+             "PATH"
+             (string-join
+              (map (lambda (name)
+                     (string-append (input-path name) "/bin"))
+                   '("bash" "coreutils" "findutils" "tar" "gzip" "unzip" "patchelf"))
+              ":")))
+
+          (define (elf? file)
+            (false-if-exception
+             (call-with-input-file file
+               (lambda (port)
+                 (let ((magic (get-bytevector-n port 4)))
+                   (and (= 4 (bytevector-length magic))
+                        (= #x7f (bytevector-u8-ref magic 0))
+                        (= (char->integer #\E) (bytevector-u8-ref magic 1))
+                        (= (char->integer #\L) (bytevector-u8-ref magic 2))
+                        (= (char->integer #\F) (bytevector-u8-ref magic 3))))))))
+
+          (define (patch-elf! file ld-so rpath)
+            (when (elf? file)
+              (when (zero? (system* "patchelf" "--print-interpreter" file))
+                (invoke "patchelf" "--set-interpreter" ld-so file))
+              (invoke "patchelf" "--set-rpath" rpath file)))
+
+          (define (sha256sum file)
+            (let* ((pipe (open-pipe* OPEN_READ "sha256sum" file))
+                   (line (read-line pipe)))
+              (unless (zero? (close-pipe pipe))
+                (error "sha256sum failed" file))
+              (car (string-tokenize line))))
+
+          (define (json-string value)
+            (call-with-output-string
+              (lambda (port)
+                (write value port))))
+
+          (define (json-array values)
+            (string-append "[" (string-join (map json-string values) ",") "]"))
+
+          (define (wasm-url name)
+            (string-append "/assets/tree-sitter/languages/tree-sitter-"
+                           (symbol->string name) ".wasm"))
+
+          (define (query-url name)
+            (string-append "/assets/tree-sitter/queries/"
+                           (symbol->string name) "/highlights.scm"))
+
+          (define (wasm-file name)
+            (string-append languages-dir "/tree-sitter-"
+                           (symbol->string name) ".wasm"))
+
+          (define (query-file name)
+            (string-append queries-dir "/" (symbol->string name) "/highlights.scm"))
+
+          (define (source-work-dir name)
+            (string-append work "/sources/" (symbol->string name)))
+
+          (define (alist-value spec key)
+            (assoc-ref (cdr spec) key))
+
+          (define (write-edn)
+            (call-with-output-file (string-append assets "/manifest.edn")
+              (lambda (port)
+                (format port "{:schema \"loam.tree-sitter/assets\"\n")
+                (format port " :tree-sitter {:runtime \"web-tree-sitter\"\n")
+                (format port "               :runtime-version ~s\n" tree-sitter-version*)
+                (format port "               :cli-version ~s\n" tree-sitter-version*)
+                (format port "               :wasi-sdk-version ~s\n" wasi-sdk-version*)
+                (format port "               :runtime-js \"/assets/tree-sitter/tree-sitter.js\"\n")
+                (format port "               :runtime-wasm \"/assets/tree-sitter/tree-sitter.wasm\"}\n")
+                (format port " :languages\n {")
+                (let loop ((remaining grammars) (first? #t))
+                  (match remaining
+                    (() (format port "}}\n"))
+                    (((name . spec) rest ...)
+                     (unless first? (format port "\n  "))
+                     (format port ":~a {:aliases [~a]\n"
+                             name
+                             (string-join (map (lambda (alias)
+                                                 (format #f "~s" alias))
+                                               (assoc-ref spec 'aliases))
+                                          " "))
+                     (format port "       :wasm ~s\n" (wasm-url name))
+                     (format port "       :wasm-sha256 ~s\n" (sha256sum (wasm-file name)))
+                     (format port "       :query ~s\n" (query-url name))
+                     (format port "       :sample ~s\n" (assoc-ref spec 'sample))
+                     (format port "       :source {:repo ~s\n"
+                             (assoc-ref spec 'repo))
+                     (format port "                :version ~s\n"
+                             (assoc-ref spec 'version))
+                     (format port "                :tag ~s\n"
+                             (or (assoc-ref spec 'tag) :null))
+                     (format port "                :commit ~s\n"
+                             (assoc-ref spec 'commit))
+                     (format port "                :guix-base32 ~s}}"
+                             (assoc-ref spec 'source-hash))
+                     (loop rest #f)))))))
+
+          (define (write-json)
+            (call-with-output-file (string-append assets "/manifest.json")
+              (lambda (port)
+                (format port "{\n")
+                (format port "  \"schema\": \"loam.tree-sitter/assets\",\n")
+                (format port "  \"treeSitter\": {\n")
+                (format port "    \"runtime\": \"web-tree-sitter\",\n")
+                (format port "    \"runtimeVersion\": ~a,\n" (json-string tree-sitter-version*))
+                (format port "    \"cliVersion\": ~a,\n" (json-string tree-sitter-version*))
+                (format port "    \"wasiSdkVersion\": ~a,\n" (json-string wasi-sdk-version*))
+                (format port "    \"runtimeJs\": \"/assets/tree-sitter/tree-sitter.js\",\n")
+                (format port "    \"runtimeWasm\": \"/assets/tree-sitter/tree-sitter.wasm\"\n")
+                (format port "  },\n")
+                (format port "  \"languages\": {\n")
+                (let loop ((remaining grammars) (first? #t))
+                  (match remaining
+                    (() (format port "\n  }\n}\n"))
+                    (((name . spec) rest ...)
+                     (unless first? (format port ",\n"))
+                     (format port "    ~a: {\n" (json-string (symbol->string name)))
+                     (format port "      \"aliases\": ~a,\n" (json-array (assoc-ref spec 'aliases)))
+                     (format port "      \"wasm\": ~a,\n" (json-string (wasm-url name)))
+                     (format port "      \"wasmSha256\": ~a,\n" (json-string (sha256sum (wasm-file name))))
+                     (format port "      \"query\": ~a,\n" (json-string (query-url name)))
+                     (format port "      \"sample\": ~a,\n" (json-string (assoc-ref spec 'sample)))
+                     (format port "      \"source\": {\n")
+                     (format port "        \"repo\": ~a,\n" (json-string (assoc-ref spec 'repo)))
+                     (format port "        \"version\": ~a,\n" (json-string (assoc-ref spec 'version)))
+                     (format port "        \"tag\": ~a,\n"
+                             (if (assoc-ref spec 'tag)
+                               (json-string (assoc-ref spec 'tag))
+                               "null"))
+                     (format port "        \"commit\": ~a,\n" (json-string (assoc-ref spec 'commit)))
+                     (format port "        \"guixBase32\": ~a\n" (json-string (assoc-ref spec 'source-hash)))
+                     (format port "      }\n")
+                     (format port "    }")
+                     (loop rest #f)))))))
+
+          (define (install-runtime!)
+            (let ((runtime-dir (string-append work "/web-tree-sitter")))
+              (mkdir-p runtime-dir)
+              (invoke "tar" "xzf" (input-path "web-tree-sitter") "-C" runtime-dir)
+              (copy-file (string-append runtime-dir "/web-tree-sitter.js")
+                         (string-append assets "/tree-sitter.js"))
+              (copy-file (string-append runtime-dir "/web-tree-sitter.wasm")
+                         (string-append assets "/tree-sitter.wasm"))
+              (copy-file (input-path "tree-sitter-license")
+                         (string-append licenses-dir "/tree-sitter-MIT.txt"))))
+
+          (define (install-wasi-sdk! ld-so base-rpath)
+            (invoke "tar" "xzf" (input-path "wasi-sdk") "-C" work)
+            (let* ((wasi-dir (string-append work "/wasi-sdk-" wasi-sdk-version* "-x86_64-linux"))
+                   (rpath (string-append wasi-dir "/lib:" base-rpath)))
+              (for-each (lambda (file)
+                          (patch-elf! file ld-so rpath))
+                        (find-files wasi-dir))
+              wasi-dir))
+
+          (define (install-cli! ld-so rpath)
+            (let ((cli-dir (string-append work "/tree-sitter-cli")))
+              (mkdir-p cli-dir)
+              (invoke "unzip" "-q" (input-path "tree-sitter-cli") "-d" cli-dir)
+              (let ((program (string-append cli-dir "/tree-sitter")))
+                (chmod program #o755)
+                (patch-elf! program ld-so rpath)
+                program)))
+
+          (define (build-grammar! tree-sitter spec)
+            (match spec
+              ((name . meta)
+               (let* ((grammar-source (input-path (assoc-ref meta 'input)))
+                      (source-dir (source-work-dir name))
+                      (grammar-dir (string-append source-dir "/" (assoc-ref meta 'grammar-dir)))
+                      (query-dest (query-file name))
+                      (license-dest (string-append licenses-dir "/" (assoc-ref meta 'license-output))))
+                 (copy-recursively grammar-source source-dir)
+                 (mkdir-p (dirname query-dest))
+                 (copy-file (string-append source-dir "/" (assoc-ref meta 'query))
+                            query-dest)
+                 (copy-file (string-append source-dir "/" (assoc-ref meta 'license))
+                            license-dest)
+                 (invoke tree-sitter "build" "--wasm"
+                         "--output" (wasm-file name)
+                         grammar-dir)))))
+
+          (set-build-path!)
+          (mkdir-p work)
+          (mkdir-p assets)
+          (mkdir-p languages-dir)
+          (mkdir-p queries-dir)
+          (mkdir-p licenses-dir)
+          (setenv "HOME" work)
+          (setenv "XDG_CACHE_HOME" (string-append work "/cache"))
+          (let* ((ld-so (search-input-file inputs "/lib/ld-linux-x86-64.so.2"))
+                 (base-rpath (string-join
+                              (list (string-append (input-path "glibc") "/lib")
+                                    (string-append (input-path "gcc:lib") "/lib"))
+                              ":"))
+                 (wasi-dir (install-wasi-sdk! ld-so base-rpath))
+                 (tree-sitter (install-cli! ld-so base-rpath)))
+            (setenv "TREE_SITTER_WASI_SDK_PATH" wasi-dir)
+            (invoke tree-sitter "--version")
+            (install-runtime!)
+            (for-each (lambda (spec)
+                        (build-grammar! tree-sitter spec))
+                      grammars)
+            (write-edn)
+            (write-json)
+            #t))))
+    (native-inputs
+     `(("bash" ,bash-minimal)
+       ("coreutils" ,coreutils)
+       ("findutils" ,findutils)
+       ("tar" ,tar)
+       ("gzip" ,gzip)
+       ("unzip" ,unzip)
+       ("patchelf" ,patchelf)
+       ("glibc" ,glibc)
+       ("gcc:lib" ,gcc "lib")
+       ("tree-sitter-cli" ,tree-sitter-cli-source)
+       ("web-tree-sitter" ,web-tree-sitter-source)
+       ("tree-sitter-license" ,tree-sitter-license-source)
+       ("wasi-sdk" ,wasi-sdk-source)
+       ("grammar-clojure" ,tree-sitter-clojure-source)
+       ("grammar-javascript" ,tree-sitter-javascript-source)
+       ("grammar-typescript" ,tree-sitter-typescript-source)
+       ("grammar-python" ,tree-sitter-python-source)
+       ("grammar-scala" ,tree-sitter-scala-source)))
+    (home-page "https://github.com/tree-sitter/tree-sitter")
+    (synopsis "Loam Tree-sitter browser assets")
+    (description
+     "Build the Tree-sitter runtime, grammar WebAssembly modules, highlight
+queries, licenses, and manifests expected by Loam's browser highlighter.")
+    (license (list license:expat license:cc0))))
+
+loam-tree-sitter-assets
