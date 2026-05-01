@@ -5,23 +5,19 @@
   "packageManager": "npm@11.12.1",
   "scripts": {
     "copy-tree-sitter-assets": "node scripts/copy-tree-sitter-assets.mjs",
+    "tree-sitter:assets": "npm run copy-tree-sitter-assets",
+    "smoke-tree-sitter-assets": "node scripts/smoke-tree-sitter-assets.mjs",
+    "tree-sitter:smoke": "npm run smoke-tree-sitter-assets",
     "client:release": "shadow-cljs release client",
     "cljs:release": "npm run client:release",
-    "prepare-assets": "npm run copy-tree-sitter-assets && npm run client:release",
-    "postinstall": "npm run copy-tree-sitter-assets",
+    "prepare-assets": "npm run client:release",
     "test": "bb test",
     "build": "npm run prepare-assets && bb build",
     "site": "npm run build",
     "serve": "python3 -m http.server 8070 --directory build/site"
   },
   "dependencies": {
-    "@vscode/tree-sitter-wasm": "0.3.1",
-    "@yogthos/tree-sitter-clojure": "0.0.14",
-    "shiki": "^4.0.2",
-    "tree-sitter-javascript": "0.25.0",
-    "tree-sitter-python": "0.25.0",
-    "tree-sitter-typescript": "0.23.2",
-    "web-tree-sitter": "0.26.8"
+    "shiki": "^4.0.2"
   },
   "devDependencies": {
     "shadow-cljs": "3.4.4"

@@ -15,7 +15,7 @@
   Matching language WASM/query files expected under
   `public/assets/tree-sitter`. The browser client is part of the generic
   `public/assets/loam-client.js` bundle built by `npm run client:release`.
-  Use `npm run prepare-assets` to sync and compile defaults from node_modules.
+  Use `npm run copy-tree-sitter-assets` to build/sync Guix-managed assets.
   Pass custom :languages map to `extension` to add or replace languages."
   {:clojure {:aliases ["clj" "cljs" "cljc" "edn"]
              :wasm "/assets/tree-sitter/languages/tree-sitter-clojure.wasm"
@@ -28,7 +28,10 @@
                 :query "/assets/tree-sitter/queries/typescript/highlights.scm"}
    :python {:aliases ["py"]
             :wasm "/assets/tree-sitter/languages/tree-sitter-python.wasm"
-            :query "/assets/tree-sitter/queries/python/highlights.scm"}})
+            :query "/assets/tree-sitter/queries/python/highlights.scm"}
+   :scala {:aliases ["sc"]
+           :wasm "/assets/tree-sitter/languages/tree-sitter-scala.wasm"
+           :query "/assets/tree-sitter/queries/scala/highlights.scm"}})
 
 (def render-src-block
   (highlight/render-src-block
@@ -49,10 +52,9 @@
 (defn runtime-loader-js [opts]
   (let [runtime (or (:runtime opts) "./tree-sitter.js")
         runtime-global (or (:runtime-global opts) "LoamTreeSitter")]
-    (str "import(" (json/render-json runtime) ").then(() => {\n"
-         "  globalThis[" (json/render-json runtime-global) "] = globalThis.Parser;\n"
-         "  globalThis.dispatchEvent(new CustomEvent('loam:tree-sitter-runtime', {detail: globalThis.Parser}));\n"
-         "});\n")))
+    (str "import * as runtime from " (json/render-json runtime) ";\n"
+         "globalThis[" (json/render-json runtime-global) "] = runtime;\n"
+         "globalThis.dispatchEvent(new CustomEvent('loam:tree-sitter-runtime', {detail: runtime}));\n")))
 
 (defn head-tags [opts]
   (fn [_ctx current-url]

@@ -17,7 +17,7 @@ Loam 的核心立场是：Org 已经有丰富语义，站点生成器不应该�
 
 * 快速开始
 
-先安装 Node 依赖。Node 依赖用于同步 npm 资源，并通过 =shadow-cljs= 编译 Loam 的浏览器端客户端。
+先安装 Node 依赖。Node 依赖用于运行测试、编译 Loam 浏览器端客户端，并提供 Shiki 相关前端开发入口。
 
 #+begin_src bash
 npm install
@@ -55,18 +55,19 @@ npm run build -- \
 npm run serve
 #+end_src
 
-注意：Tree-sitter 高亮需要通过 HTTP 服务访问。不要直接用浏览器打开 =file://.../index.html= ，否则浏览器通常会阻止 =fetch= / WASM / ESM 资源加载。
+注意：默认高亮 provider 是 Shiki。若显式启用 Tree-sitter WASM，高亮需要通过 HTTP 服务访问。不要直接用浏览器打开 =file://.../index.html= ，否则浏览器通常会阻止 =fetch= / WASM / ESM 资源加载。
 
 * 常用命令
 
 | 命令 | 作用 |
 |------+------|
-| =npm install= | 安装 npm 依赖，并复制 Tree-sitter npm 资源 |
+| =npm install= | 安装 npm 依赖；不会自动构建 Tree-sitter WASM |
 | =npm test= | 运行 Clojure 测试 |
-| =npm run copy-tree-sitter-assets= | 只同步 Tree-sitter runtime、WASM、query、license 文件 |
+| =npm run copy-tree-sitter-assets= | 用 Guix 构建并同步 Tree-sitter runtime、WASM、query、license、manifest |
+| =npm run smoke-tree-sitter-assets= | 加载本地 Tree-sitter WASM 资产并做解析/query smoke test |
 | =npm run client:release= | 用 =shadow-cljs= 编译 Loam 浏览器端客户端 |
 | =npm run cljs:release= | =client:release= 的兼容别名 |
-| =npm run prepare-assets= | 同步 npm 资源并编译浏览器端客户端 |
+| =npm run prepare-assets= | 编译浏览器端客户端；默认 Shiki 不需要 Tree-sitter 资产 |
 | =npm run build -- ...= | 准备资产并调用 =bb build= 构建站点 |
 | =npm run serve= | 用 Python HTTP server 预览 =build/site= |
 | =bb build ...= | 只运行 Loam 静态构建；调用前需要自行准备资产 |
@@ -109,11 +110,9 @@ loam.site/build-site!
 - =search-index.json=：浏览器搜索使用的 JSON 数据
 - =graph.edn= 和 =graph.json=：图谱节点和边
 - =assets/site.css= 和 =assets/search.js=：默认主题资产
-- =assets/loam-treesitter.css=：Tree-sitter 高亮样式
-- =assets/loam-treesitter.json=：Tree-sitter 语言 manifest
+- =assets/loam-shiki.css= 和 =assets/loam-shiki.js=：默认 Shiki 高亮资产
 - =assets/loam-client.js=：由 =shadow-cljs= 编译的 Loam 浏览器端客户端
-- =assets/tree-sitter/loam-runtime.js=：CSP 友好的 ESM runtime loader
-- =assets/tree-sitter/**=：Tree-sitter runtime、WASM、query、license 文件
+- 如果启用 Tree-sitter：还会输出 =assets/loam-treesitter.css=、=assets/loam-treesitter.json=、=assets/tree-sitter/loam-runtime.js=，并需要 =assets/tree-sitter/**= 运行时资产
 - =public/**=：用户静态文件，构建时复制到输出目录根部
 
 文件夹分组由 =loam.directory= 扩展建立。页面侧边栏会消费 =:directories= 索引并按 EDN 相对目录分组。例如 =daily/*.edn= 会出现在 =daily= 分组下，根目录文档会出现在默认 =notes= 分组下。
@@ -129,10 +128,17 @@ Loam 的静态资产有两类：
 
 默认构建顺序是先复制 =public/=，再写入 extension 资产。因此如果两者写入同一路径，extension 资产会覆盖 =public/= 中的文件。建议用户资产和扩展资产使用不同路径，避免无意覆盖。
 
-Tree-sitter npm 资源不手动提交到仓库。它们由脚本同步到 =public/assets/tree-sitter=：
+Tree-sitter WASM 资产不手动提交到仓库。它们由 Guix 固定 runtime、CLI、grammar 源码和 WASI SDK，再由脚本同步到 =public/assets/tree-sitter=：
 
 #+begin_src bash
 npm run copy-tree-sitter-assets
+npm run smoke-tree-sitter-assets
+#+end_src
+
+如果已经有外部构建好的资产目录，可以跳过 Guix build：
+
+#+begin_src bash
+LOAM_TREE_SITTER_ASSETS=/path/to/assets/tree-sitter npm run copy-tree-sitter-assets
 #+end_src
 
 Loam 的浏览器端客户端由 =shadow-cljs= 编译到 =public/assets/loam-client.js=：
@@ -162,7 +168,7 @@ Loam 可以被理解成一个声明式 Web system，而不只是模板渲染器�
 | extension | service contribution | 向 renderer、indexer、layout、asset、head、hook 等槽位贡献值 |
 | =:renderers= / =:indexers= / =:layouts= | extension target | 每个 target 都有自己的 compose/extend 规则 |
 | =:highlight= | service variant / 单实例槽位 | 在 Tree-sitter、Shiki、none 或自定义 provider 之间选择 |
-| =public/= 和 npm 资源 | 外部输入 / store 内容 | 作为静态构建的资源输入 |
+| =public/=、npm 资源、Guix Tree-sitter 资产 | 外部输入 / store 内容 | 作为静态构建的资源输入 |
 | =build-site!= | build derivation | 从 system 和 EDN 输入生成一个静态输出目录 |
 | =output-dir= | generation | 一个可以部署、回滚或比较的构建结果 |
 
@@ -172,7 +178,7 @@ Loam 可以被理解成一个声明式 Web system，而不只是模板渲染器�
 - target 明确：extension 应该声明自己贡献到哪个能力槽位，而不是让全局 map 隐式抢 key
 - 组合可定义：每类能力应该有自己的 compose/extend 规则，例如 append、merge、replace 或 error
 - 单实例显式：像高亮 provider 这种互斥能力，应建模成单实例槽位或 variant，而不是靠安装顺序碰运气
-- 资产可追踪：npm、WASM、CSS、JS 都应该能从声明追到输出路径
+- 资产可追踪：npm、Guix、WASM、CSS、JS 都应该能从声明追到输出路径
 - 输出可复现：同一份 EDN 输入和同一个 system，应该生成可解释、可比较的静态站点
 
 因此 Loam 的长期方向不是变成大型前端框架，而是成为 Org/EDN 驱动的声明式 Web system 构建层。
@@ -214,7 +220,7 @@ Loam 被拆成小的、可替换的层：
 
 * System 和 Extension
 
-Loam 的运行配置叫 system。默认系统由 =loam.defaults/create-system= 创建，它会安装默认渲染器、高亮 provider、搜索、图谱、文件夹分组、标题目录和默认主题。默认高亮 provider 是 Tree-sitter。
+Loam 的运行配置叫 system。默认系统由 =loam.defaults/create-system= 创建，它会安装默认渲染器、高亮 provider、搜索、图谱、文件夹分组、标题目录和默认主题。默认高亮 provider 是 Shiki；Tree-sitter WASM 是显式 opt-in。
 
 #+begin_src clojure
 (require '[loam.defaults :as loam])
@@ -276,10 +282,13 @@ Extension 按顺序 fold。每个 target 自己决定如何 compose/extend：例
 #+begin_src clojure
 (require '[loam.defaults :as loam])
 
-;; 默认：Tree-sitter
+;; 默认：Shiki
 (loam/create-system {})
 
-;; 使用 Shiki
+;; 显式使用 Tree-sitter
+(loam/create-system {:highlight :treesitter})
+
+;; 配置 Shiki
 (loam/create-system
  {:highlight {:provider :shiki
               :theme "github-dark"
@@ -367,12 +376,13 @@ Extension 按顺序 fold。每个 target 自己决定如何 compose/extend：例
 
 * 前端扩展和 npm 生态
 
-Loam 的前端扩展不应该只服务 Tree-sitter。Tree-sitter 只是第一个需要浏览器端代码、WASM 和 npm 包的内置扩展。更通用的模型是：
+Loam 的前端扩展不应该只服务 Tree-sitter。Tree-sitter 只是第一个需要浏览器端代码、WASM 和外部资产流水线的内置扩展。更通用的模型是：
 
 - Clojure/EDN 层 extension 通过 =:extends= 贡献语义渲染、索引、布局、head 注入和 manifest
-- npm 生态负责浏览器端依赖，例如 WASM runtime、UI 小组件、搜索库、图谱可视化库
+- npm 生态负责浏览器端开发工具、Shiki 这类 JS 包、UI 小组件、搜索库、图谱可视化库
+- Guix 负责 Tree-sitter runtime/CLI/grammar 源码/WASI SDK/WASM 资产的可复现构建
 - =shadow-cljs= 负责编译 Loam 自带的浏览器端入口
-- =public/= 负责承载 npm 同步出来的静态资源和用户自定义资源
+- =public/= 负责承载外部同步出来的静态资源和用户自定义资源
 - =:head= target 负责把编译产物或 ESM loader 注入页面
 
 现在 Loam 有一个通用浏览器入口：
@@ -408,7 +418,7 @@ Shiki 高亮则使用 extension 生成的独立 ESM loader，因此不用把较�
 
 * Tree-sitter WASM 高亮
 
-默认系统会在浏览器中用 Tree-sitter WASM 高亮 Org =src-block=。这只改变展示层，不改变 EDN AST 语义。
+Tree-sitter WASM 高亮是 opt-in provider。它适合需要语法树语义、可定制 query 或较新/custom grammar 的站点；默认系统使用 Shiki 以避免普通构建依赖 Guix/WASM 资产。
 
 如果你构建自定义系统，可以用 =:highlight= 显式配置 Tree-sitter：
 
@@ -445,7 +455,7 @@ src/loam/highlight/treesitter/client.cljs
 public/assets/loam-client.js
 #+end_example
 
-Tree-sitter runtime、语言 WASM、query 文件由 npm 包同步到：
+Tree-sitter runtime、语言 WASM、query、license、manifest 文件由 Guix 构建，再同步到：
 
 #+begin_example
 public/assets/tree-sitter/tree-sitter.js
@@ -454,8 +464,11 @@ public/assets/tree-sitter/languages/tree-sitter-clojure.wasm
 public/assets/tree-sitter/languages/tree-sitter-javascript.wasm
 public/assets/tree-sitter/languages/tree-sitter-typescript.wasm
 public/assets/tree-sitter/languages/tree-sitter-python.wasm
+public/assets/tree-sitter/languages/tree-sitter-scala.wasm
 public/assets/tree-sitter/queries/*/highlights.scm
 public/assets/tree-sitter/licenses/*.txt
+public/assets/tree-sitter/manifest.edn
+public/assets/tree-sitter/manifest.json
 #+end_example
 
 Runtime loader 是一个小的 ESM 文件，默认内容类似：
@@ -488,13 +501,27 @@ globalThis.dispatchEvent(new CustomEvent("loam:tree-sitter-runtime", {detail: ru
                       :query "/assets/tree-sitter/queries/rust/highlights.scm"}}}})
 #+end_src
 
-替换或新增 grammar 时，要保证 =web-tree-sitter= runtime 和语言 WASM 的 ABI 版本兼容。
+替换或新增 grammar 时，要保证 =web-tree-sitter= runtime 和语言 WASM 的 ABI 版本兼容。Loam 的默认方案是修改 =guix/loam-tree-sitter-assets.scm= 和 =guix/loam/build-tree-sitter-assets.scm=，用固定 commit/hash 生成新的资产输出，然后运行：
+
+#+begin_src bash
+guix build -f guix/loam-tree-sitter-assets.scm
+npm run copy-tree-sitter-assets
+npm run smoke-tree-sitter-assets
+#+end_src
+
+启用 Tree-sitter 的完整构建顺序通常是：
+
+#+begin_src bash
+npm run copy-tree-sitter-assets
+npm run client:release
+bb build --edn-dir /path/to/edn --output-dir build/site
+#+end_src
 
 * Shiki 高亮
 
 Shiki 是另一种高亮提供方案。它基于 TextMate grammar 和主题，更偏展示效果，适合更强调主题一致性的场景。
 
-如果你想启用 Shiki，用 =:highlight= 选择 Shiki provider：
+默认系统已经启用 Shiki。你也可以用 =:highlight= 显式配置 Shiki provider：
 
 #+begin_src clojure
 (require '[loam.defaults :as loam])
@@ -599,14 +626,14 @@ Indexer 接收当前 index 和 documents，返回新的 index。
 | =:url-prefix= | ="/notes/"= | 文档页面 URL 前缀 |
 | =:public-dir= | ="public"= | 用户静态资产目录 |
 | =:site-title= | ="Loam"= | 默认主题显示的网站标题 |
-| =:highlight= | =:treesitter= | 高亮 provider；可选 =:treesitter=、=:shiki=、=:none=、provider 配置 map 或高亮 extension map |
+| =:highlight= | =:shiki= | 高亮 provider；可选 =:treesitter=、=:shiki=、=:none=、provider 配置 map 或高亮 extension map |
 | =:extensions= | =nil= | 追加安装的 extension |
 
 * 排障
 
 ** 页面没有样式或脚本
 
-确认构建命令使用了 =npm run build=，而不是只运行 =bb build=。如果直接运行 =bb build=，需要先执行：
+确认构建命令使用了 =npm run build=，而不是只运行 =bb build=。如果直接运行 =bb build=，默认 Shiki 资产由 extension 写入输出目录；只有 =loam-client.js= 这类编译型客户端资产需要先执行：
 
 #+begin_src bash
 npm run prepare-assets
@@ -614,7 +641,7 @@ npm run prepare-assets
 
 ** Tree-sitter 高亮不生效
 
-检查输出目录是否包含：
+先确认系统配置里启用了 ={:highlight :treesitter}= 或 ={:highlight {:provider :treesitter ...}}=。然后检查输出目录是否包含：
 
 #+begin_example
 assets/loam-client.js
@@ -624,6 +651,13 @@ assets/tree-sitter/tree-sitter.wasm
 assets/tree-sitter/languages/tree-sitter-clojure.wasm
 assets/tree-sitter/queries/clojure/highlights.scm
 #+end_example
+
+如果缺少 =assets/tree-sitter/**=，先运行：
+
+#+begin_src bash
+npm run copy-tree-sitter-assets
+npm run smoke-tree-sitter-assets
+#+end_src
 
 还要确认页面是通过 HTTP 服务访问，而不是 =file://=。
 

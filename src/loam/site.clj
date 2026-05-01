@@ -109,7 +109,7 @@
   - :url-prefix default /notes/
   - :site-title default Loam
   - :public-dir default public/
-  - :highlight default :treesitter
+  - :highlight default :shiki
   - :extensions extension maps"
   [opts]
   (validate-build-opts! opts)

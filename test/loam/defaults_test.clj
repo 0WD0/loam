@@ -13,8 +13,17 @@
 (defn extension-ids [system]
   (set (map :id (:extensions system))))
 
-(deftest default-system-uses-treesitter-highlighter
+(deftest default-system-uses-shiki-highlighter
   (let [system (defaults/create-system)]
+    (is (not (contains? (extension-ids system) :loam.highlight/treesitter-wasm)))
+    (is (contains? (extension-ids system) :loam.highlight/shiki))
+    (is (not (contains? (:assets system) "assets/loam-treesitter.css")))
+    (is (contains? (:assets system) "assets/loam-shiki.css"))
+    (is (str/includes? (pr-str (render/render-document system src-node))
+                       ":data-loam-shiki true"))))
+
+(deftest treesitter-highlight-option-replaces-default-shiki
+  (let [system (defaults/create-system {:highlight :treesitter})]
     (is (contains? (extension-ids system) :loam.highlight/treesitter-wasm))
     (is (not (contains? (extension-ids system) :loam.highlight/shiki)))
     (is (contains? (:assets system) "assets/loam-treesitter.css"))
@@ -22,7 +31,7 @@
     (is (str/includes? (pr-str (render/render-document system src-node))
                        ":data-loam-treesitter true"))))
 
-(deftest shiki-highlight-option-replaces-default-treesitter
+(deftest shiki-highlight-option-configures-default-shiki
   (let [system (defaults/create-system {:highlight {:provider :shiki
                                                     :theme "github-light"
                                                     :languages ["clojure"]}})]

@@ -10,7 +10,7 @@
             [loam.theme.default :as theme.default]
             [loam.toc :as toc]))
 
-(def default-highlight :treesitter)
+(def default-highlight :shiki)
 
 (defn- normalize-provider [provider]
   (cond
@@ -29,7 +29,7 @@
   - a map with :provider plus provider options"
   [provider]
   (cond
-    (nil? provider) (treesitter.wasm/extension)
+    (nil? provider) (shiki/extension)
     (false? provider) nil
     (and (map? provider) (:id provider)) provider
     (map? provider) (let [provider-name (normalize-provider (or (:provider provider)
