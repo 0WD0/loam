@@ -1,32 +1,50 @@
 #+title: Loam
 
-Loam is an EDN-native web framework for semantic Org knowledge bases.
+Loam 是一个基于 EDN 的 Org 语义站点框架。
 
-It consumes structured EDN documents, usually produced by =ox-edn=, and turns them into indexed, link-aware, extensible web experiences.
+它读取结构化 EDN 文档，通常由 =ox-edn= 从 Org 文件导出，然后生成带索引、链接解析、反向链接、搜索、图谱数据和可扩展渲染能力的静态站点。
 
-* Design goals
+Loam 的核心立场是：Org 已经有丰富语义，站点生成器不应该先把它压扁成 Markdown 风格的中间模型。=ox-edn= 负责把 Org 导出成语义 EDN；Loam 负责路由、索引、渲染、资产和交互。
 
-- EDN-native: no Markdown conversion layer
-- Data-first: every stage is inspectable Clojure data
-- Extensible: renderers, indexers, layouts, hooks, and assets are replaceable
-- Static-first: works without a server, but does not prevent interactive CLJS frontends
-- Org-aware: preserves IDs, custom IDs, targets, radio targets, fuzzy links, backlinks
+* 设计目标
 
-* Quick start
+- 语义优先：保留 Org 的 ID、CUSTOM_ID、target、radio target、fuzzy link、headline 层级和 src block
+- EDN 原生：不经过 Markdown 转换层，每一阶段都是可检查的 Clojure 数据
+- 静态优先：默认输出纯静态文件，可以部署到任意静态服务
+- 可扩展：渲染器、索引器、布局、head 注入、hook 和静态资产都可以替换
+- 小核心：Loam 不试图拥有完整前端框架；交互能力通过扩展和编译资产加入
+- 与 =ox-edn= 分工清晰：=ox-edn= 只导出语义数据，Loam 只处理站点层能力
+
+* 快速开始
+
+先安装 Node 依赖。Node 依赖用于同步 Tree-sitter WASM/query 资源，并通过 =shadow-cljs= 编译浏览器端客户端。
 
 #+begin_src bash
 npm install
-npm test
+#+end_src
 
+运行测试：
+
+#+begin_src bash
+npm test
+#+end_src
+
+从 EDN 目录构建静态站点：
+
+#+begin_src bash
 npm run build -- \
   --edn-dir /path/to/edn \
   --output-dir build/site \
   --url-prefix /notes/
+#+end_src
 
+本地预览：
+
+#+begin_src bash
 npm run serve
 #+end_src
 
-If you are using the sibling =ox-edn= project:
+如果使用相邻的 =ox-edn= 项目，可以直接指向它生成的 EDN 目录：
 
 #+begin_src bash
 npm run build -- \
@@ -37,52 +55,140 @@ npm run build -- \
 npm run serve
 #+end_src
 
-* Current static output
+注意：Tree-sitter 高亮需要通过 HTTP 服务访问。不要直接用浏览器打开 =file://.../index.html= ，否则浏览器通常会阻止 =fetch= / WASM / ESM 资源加载。
 
-The default static build emits:
+* 常用命令
 
-- =index.html=: home page with grouped sidebar and search UI
-- =notes/<slug>/index.html=: one page per EDN document
-- =index.edn=: public navigation/link/backlink/search/graph index
-- =search-index.json=: browser-friendly search data
-- =graph.edn= and =graph.json=: graph nodes and edges
-- =assets/site.css= and =assets/search.js=: default theme assets
-- =assets/loam-treesitter.css= and =assets/loam-treesitter.json=: default Tree-sitter CSS/manifest
-- =assets/treesitter.js=: shadow-cljs-built Tree-sitter browser client
-- =assets/tree-sitter/**=: Tree-sitter runtime loader, WASM, and query assets
-- =public/**=: static assets copied into output root
+| 命令 | 作用 |
+|------+------|
+| =npm install= | 安装 npm 依赖，并复制 Tree-sitter npm 资源 |
+| =npm test= | 运行 Clojure 测试 |
+| =npm run copy-tree-sitter-assets= | 只同步 Tree-sitter runtime、WASM、query、license 文件 |
+| =npm run cljs:release= | 用 =shadow-cljs= 编译浏览器端 Tree-sitter 客户端 |
+| =npm run prepare-assets= | 同步 Tree-sitter 资源并编译浏览器端客户端 |
+| =npm run build -- ...= | 准备资产并调用 =bb build= 构建站点 |
+| =npm run serve= | 用 Python HTTP server 预览 =build/site= |
+| =bb build -- ...= | 只运行 Loam 静态构建；调用前需要自行准备资产 |
 
-The sidebar groups pages by EDN relative directory, so =daily/*.edn= and other subtrees become sections automatically.
+* 数据流
 
-* Architecture
+Loam 的默认数据流如下：
 
-Loam is split into small replaceable layers:
+#+begin_example
+Org 文件
+  │
+  ▼
+ox-edn
+  │  导出语义 EDN
+  ▼
+*.edn 文档目录
+  │
+  ▼
+loam.site/build-site!
+  │
+  ├─ 读取文档
+  ├─ 建立页面索引、标题索引、ID/custom-id/target 索引
+  ├─ 解析链接、反向链接、搜索数据和图谱数据
+  ├─ 渲染 HTML
+  ├─ 写入扩展资产
+  └─ 复制 public/ 静态文件
+  ▼
+静态站点目录
+#+end_example
 
-| Namespace | Responsibility |
-|-----------+----------------|
-| =loam.core= | System map, extension installation, hooks |
-| =loam.ast= | AST traversal, title/text extraction, source helpers |
-| =loam.index= | IDs, custom IDs, targets, links, backlinks, URL resolution |
-| =loam.render= | Registry-based AST -> Hiccup rendering |
-| =loam.html= | Minimal Hiccup -> HTML serialization |
-| =loam.json= | Minimal JSON serialization for static artifacts |
-| =loam.graph= | Graph data extension |
-| =loam.theme.default= | Default layouts, grouped sidebar, search UI, CSS/JS assets |
-| =loam.search= | Search index extension |
-| =loam.site= | Static site builder / CLI |
+这个分层让 Loam 可以在不理解 Org 解析细节的情况下工作。Org 语义由 =ox-edn= 保留，Loam 只消费稳定的数据结构。
 
-The important design choice: rendering is not a giant closed =case= owned by the framework. It is a registry in the system map:
+* 当前静态输出
+
+默认构建会输出：
+
+- =index.html=：首页，包含分组侧边栏和搜索框
+- =notes/<slug>/index.html=：每个 EDN 文档对应一个页面
+- =index.edn=：公开的导航、链接、反链、搜索、图谱索引数据
+- =search-index.json=：浏览器搜索使用的 JSON 数据
+- =graph.edn= 和 =graph.json=：图谱节点和边
+- =assets/site.css= 和 =assets/search.js=：默认主题资产
+- =assets/loam-treesitter.css=：Tree-sitter 高亮样式
+- =assets/loam-treesitter.json=：Tree-sitter 语言 manifest
+- =assets/treesitter.js=：由 =shadow-cljs= 编译的浏览器端高亮客户端
+- =assets/tree-sitter/loam-runtime.js=：CSP 友好的 ESM runtime loader
+- =assets/tree-sitter/**=：Tree-sitter runtime、WASM、query、license 文件
+- =public/**=：用户静态文件，构建时复制到输出目录根部
+
+页面侧边栏会按 EDN 相对目录分组。例如 =daily/*.edn= 会出现在 =daily= 分组下，根目录文档会出现在默认 =notes= 分组下。
+
+* 目录和资产约定
+
+Loam 的静态资产有两类：
+
+1. 用户资产：放在 =public/= 下，构建时原样复制到输出目录。
+2. 扩展资产：由 extension 的 =:assets= map 生成，构建时写入输出目录。
+
+默认构建顺序是先复制 =public/=，再写入 extension 资产。因此如果两者写入同一路径，extension 资产会覆盖 =public/= 中的文件。建议用户资产和扩展资产使用不同路径，避免无意覆盖。
+
+Tree-sitter npm 资源不手动提交到仓库。它们由脚本同步到 =public/assets/tree-sitter=：
+
+#+begin_src bash
+npm run copy-tree-sitter-assets
+#+end_src
+
+浏览器端客户端由 =shadow-cljs= 编译到 =public/assets/treesitter.js=：
+
+#+begin_src bash
+npm run cljs:release
+#+end_src
+
+通常直接运行：
+
+#+begin_src bash
+npm run prepare-assets
+#+end_src
+
+=public/assets/tree-sitter/= 和 =public/assets/treesitter.js= 是生成物，已经在 =.gitignore= 中忽略。
+
+* 架构
+
+Loam 被拆成小的、可替换的层：
+
+| Namespace | 责任 |
+|-----------+------|
+| =loam.core= | system map、extension 安装、hook 触发 |
+| =loam.ast= | AST 遍历、标题提取、文本提取、source helper |
+| =loam.anchor= | 统一 anchor / id 生成 |
+| =loam.index= | 页面、标题、ID、CUSTOM_ID、target、链接和反链索引 |
+| =loam.route= | URL 和输出路径转换 |
+| =loam.render= | 基于 registry 的 AST -> Hiccup 渲染 |
+| =loam.html= | 最小 Hiccup -> HTML 序列化 |
+| =loam.json= | 最小 JSON 序列化 |
+| =loam.search= | 搜索索引扩展 |
+| =loam.graph= | 图谱数据扩展 |
+| =loam.head= | extension 注入 =<head>= 的辅助函数 |
+| =loam.theme.default= | 默认布局、分组侧边栏、搜索 UI、主题 CSS/JS |
+| =loam.highlight.treesitter.wasm= | src block Tree-sitter WASM 高亮扩展 |
+| =loam.highlight.treesitter.client= | 浏览器端高亮客户端，使用 =shadow-cljs= 编译 |
+| =loam.site= | 静态站点构建器和 CLI 入口 |
+
+最重要的设计点：渲染不是一个框架内部封闭的巨大 =case=。渲染器是 system map 里的 registry：
 
 #+begin_src clojure
 (:renderers system)
 ;; => {:paragraph fn, :headline fn, :link fn, ...}
 #+end_src
 
-Extensions can override one node type without forking the renderer.
+因此 extension 可以只覆盖一个节点类型，而不需要 fork 整个渲染器。
 
-* Extension shape
+* System 和 Extension
 
-Extensions are plain maps:
+Loam 的运行配置叫 system。默认系统由 =loam.defaults/create-system= 创建，它会安装默认渲染器、Tree-sitter 高亮、搜索、图谱和默认主题。
+
+#+begin_src clojure
+(require '[loam.defaults :as loam])
+
+(def system
+  (loam/create-system {}))
+#+end_src
+
+Extension 是普通 Clojure map：
 
 #+begin_src clojure
 {:id :my/theme
@@ -96,18 +202,36 @@ Extensions are plain maps:
  :hooks {:site/built [(fn [event] event)]}}
 #+end_src
 
-Install them with =loam.core/create-system= or =loam.defaults/create-system=:
+常见 extension key：
+
+| Key | 说明 |
+|-----+------|
+| =:id= | extension 标识，方便调试和检查安装顺序 |
+| =:renderers= | AST 节点类型到渲染函数的映射 |
+| =:inline-types= | 哪些 AST 节点属于 inline 节点 |
+| =:indexers= | 在构建索引阶段追加/修改索引数据 |
+| =:layouts= | 页面布局函数，例如 =:page= 和 =:home= |
+| =:assets= | 构建时写入输出目录的文本资产 |
+| =:head= | 注入页面 =<head>= 的 Hiccup 或函数 |
+| =:hooks= | 构建阶段 hook，例如 =:site/built= |
+
+安装 extension：
 
 #+begin_src clojure
 (require '[loam.defaults :as loam])
 
 (def system
-  (loam/create-system {:extensions [my-extension]}))
+  (loam/create-system
+   {:extensions [my-extension]}))
 #+end_src
 
-* Tree-sitter WASM highlighting
+Extension 按顺序安装。后安装的 extension 可以覆盖前面安装的 renderer 和 layout。
 
-Loam's default system highlights Org src blocks in the browser with Tree-sitter WASM. If you build a custom system, install the extension explicitly:
+* Tree-sitter WASM 高亮
+
+默认系统会在浏览器中用 Tree-sitter WASM 高亮 Org =src-block=。这只改变展示层，不改变 EDN AST 语义。
+
+如果你构建自定义系统，可以显式安装高亮扩展：
 
 #+begin_src clojure
 (require '[loam.defaults :as loam]
@@ -123,25 +247,29 @@ Loam's default system highlights Org src blocks in the browser with Tree-sitter 
                   :query "/assets/tree-sitter/queries/clojure/highlights.scm"}}})]}))
 #+end_src
 
-The extension:
+该扩展会：
 
-- overrides =:src-block= rendering with =data-loam-treesitter= markers
-- writes =assets/loam-treesitter.css=
-- writes =assets/loam-treesitter.json= language manifest
-- injects CSS, =assets/tree-sitter/loam-runtime.js=, and =assets/treesitter.js= through Loam's =:head= extension point
+- 覆盖 =:src-block= 渲染，添加 =data-loam-treesitter= 标记
+- 写入 =assets/loam-treesitter.css=
+- 写入 =assets/loam-treesitter.json= 语言 manifest
+- 写入 =assets/tree-sitter/loam-runtime.js= ESM loader
+- 通过 =:head= 注入 CSS、runtime loader 和 =assets/treesitter.js=
 
-The browser client lives in =src/loam/highlight/treesitter/client.cljs= and compiles with =shadow-cljs= to =public/assets/treesitter.js=. The extension emits a CSP-friendly ESM loader at =assets/tree-sitter/loam-runtime.js=, and =npm run prepare-assets= copies Tree-sitter runtime/WASM/query assets from npm packages into =public/assets/tree-sitter=.
+浏览器端客户端位于：
 
-#+begin_src bash
-npm install
-npm run prepare-assets
-#+end_src
+#+begin_example
+src/loam/highlight/treesitter/client.cljs
+#+end_example
 
-Site build copies =public/= into output root automatically.
+它由 =shadow-cljs= 编译到：
 
 #+begin_example
 public/assets/treesitter.js
-assets/tree-sitter/loam-runtime.js
+#+end_example
+
+Tree-sitter runtime、语言 WASM、query 文件由 npm 包同步到：
+
+#+begin_example
 public/assets/tree-sitter/tree-sitter.js
 public/assets/tree-sitter/tree-sitter.wasm
 public/assets/tree-sitter/languages/tree-sitter-clojure.wasm
@@ -152,13 +280,41 @@ public/assets/tree-sitter/queries/*/highlights.scm
 public/assets/tree-sitter/licenses/*.txt
 #+end_example
 
-Need custom grammar? Replace files in =public/assets/tree-sitter= or pass custom =:languages= map. Need custom runtime? Pass =:runtime= as an ESM import specifier for the loader. Keep =web-tree-sitter= and language WASM ABI versions compatible.
+Runtime loader 是一个小的 ESM 文件，默认内容类似：
 
-* Examples
+#+begin_src javascript
+import * as runtime from "./tree-sitter.js";
+globalThis["LoamTreeSitter"] = runtime;
+globalThis.dispatchEvent(new CustomEvent("loam:tree-sitter-runtime", {detail: runtime}));
+#+end_src
 
-Override paragraph rendering:
+这样 =assets/treesitter.js= 不需要使用 =Function(...)= 或动态 =import(...)=，对严格 CSP 更友好。注意：如果站点启用了非常严格的 CSP，WASM 编译本身可能仍需要浏览器支持的 WASM 相关策略，例如 =wasm-unsafe-eval=；这取决于浏览器和部署环境。
+
+自定义 runtime：
 
 #+begin_src clojure
+(ts-wasm/extension
+ {:runtime "https://cdn.example.com/tree-sitter.js"
+  :runtime-global "MyTreeSitter"})
+#+end_src
+
+自定义语言：
+
+#+begin_src clojure
+(ts-wasm/extension
+ {:languages
+  {:rust {:aliases ["rs"]
+          :wasm "/assets/tree-sitter/languages/tree-sitter-rust.wasm"
+          :query "/assets/tree-sitter/queries/rust/highlights.scm"}}})
+#+end_src
+
+替换或新增 grammar 时，要保证 =web-tree-sitter= runtime 和语言 WASM 的 ABI 版本兼容。
+
+* 示例：覆盖段落渲染
+
+#+begin_src clojure
+(require '[loam.render])
+
 (def paragraph-extension
   {:id :example/paragraph
    :renderers
@@ -166,21 +322,32 @@ Override paragraph rendering:
                  [[:p.lead (loam.render/text-content node)]])}})
 #+end_src
 
-Add an index section:
+这个 extension 只覆盖 =:paragraph=。其他节点仍使用默认渲染器。
+
+* 示例：添加索引数据
+
+Indexer 接收当前 index 和 documents，返回新的 index。
 
 #+begin_src clojure
+(require '[loam.ast])
+
 (def word-count-extension
   {:id :example/word-count
    :indexers
    [(fn [idx documents]
       (assoc idx :word-count
-             (reduce + (map #(count (re-seq #"\\S+" (loam.ast/text (:ast %))))
-                            documents))))]})
+             (reduce +
+                     (map #(count (re-seq #"\\S+" (loam.ast/text (:ast %))))
+                          documents))))]})
 #+end_src
 
-Replace the page layout:
+生成后的数据会保存在构建上下文中，layout 或 hook 可以读取它。
+
+* 示例：替换页面布局
 
 #+begin_src clojure
+(require '[loam.render])
+
 (def layout-extension
   {:id :example/layout
    :layouts
@@ -190,3 +357,96 @@ Replace the page layout:
               [:main
                (loam.render/render-document ctx (:ast document))]]])}})
 #+end_src
+
+默认主题提供 =:home= 和 =:page= 两个 layout。如果只替换 =:page=，首页仍然可以使用默认布局。
+
+* 直接调用构建 API
+
+除了 CLI，也可以在 Clojure 中直接调用：
+
+#+begin_src clojure
+(require '[loam.site :as site])
+
+(site/build-site!
+ {:edn-dir "build/edn"
+  :output-dir "build/site"
+  :url-prefix "/notes/"
+  :public-dir "public"
+  :site-title "My Notes"})
+#+end_src
+
+常用选项：
+
+| 选项 | 默认值 | 说明 |
+|------+--------+------|
+| =:edn-dir= | 必填 | EDN 文档目录 |
+| =:output-dir= | 必填 | 静态站点输出目录 |
+| =:url-prefix= | ="/notes/"= | 文档页面 URL 前缀 |
+| =:public-dir= | ="public"= | 用户静态资产目录 |
+| =:site-title= | ="Loam"= | 默认主题显示的网站标题 |
+| =:extensions= | =nil= | 追加安装的 extension |
+
+* 排障
+
+** 页面没有样式或脚本
+
+确认构建命令使用了 =npm run build=，而不是只运行 =bb build=。如果直接运行 =bb build=，需要先执行：
+
+#+begin_src bash
+npm run prepare-assets
+#+end_src
+
+** Tree-sitter 高亮不生效
+
+检查输出目录是否包含：
+
+#+begin_example
+assets/treesitter.js
+assets/tree-sitter/loam-runtime.js
+assets/tree-sitter/tree-sitter.js
+assets/tree-sitter/tree-sitter.wasm
+assets/tree-sitter/languages/tree-sitter-clojure.wasm
+assets/tree-sitter/queries/clojure/highlights.scm
+#+end_example
+
+还要确认页面是通过 HTTP 服务访问，而不是 =file://=。
+
+** 浏览器报 WASM 或 fetch 错误
+
+常见原因：
+
+- 直接打开本地 HTML 文件，浏览器阻止 fetch/WASM
+- 部署服务没有正确提供 =.wasm= 文件
+- CDN 或子路径部署导致资产路径不匹配
+- Tree-sitter runtime 和 grammar WASM ABI 不兼容
+
+** 自定义语言没有高亮
+
+确认 =:languages= 里语言名、alias、WASM 路径和 query 路径都正确。Loam 会先用 src block 的语言名查找语言配置，再查找 aliases。
+
+** 搜索没有结果
+
+检查输出目录中的 =search-index.json=。默认搜索只索引 Loam 从 AST 中提取到的文本内容；如果自定义节点没有提供可提取文本，可能需要扩展 =loam.ast/text= 或添加自己的索引器。
+
+* 当前边界
+
+Loam 现在聚焦静态知识库和文档站点生成，不负责：
+
+- Org 解析本身；这由 =ox-edn= 负责
+- 客户端路由框架
+- 大型前端应用状态管理
+- 服务端动态查询
+- 全文搜索引擎后端
+
+这些能力可以通过扩展或外部系统接入，但不应该进入核心。
+
+* 下一步方向
+
+可能继续推进的方向：
+
+- 更完整的中文教程和示例站点
+- 更丰富的默认主题和布局 slot
+- 更强的 Graph/Search 交互组件
+- 更多 Tree-sitter 语言默认支持
+- 文档内嵌 API 参考
+- 更完整的部署说明，例如 GitHub Pages、Netlify、Cloudflare Pages
