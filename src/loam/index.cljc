@@ -51,7 +51,7 @@
      :anchor anchor
      :anchor-id anchor-id
      :href (if (and (not= type :org-data) anchor-id)
-             (str (:url document) "#" anchor-id)
+             (anchor/with-fragment (:url document) anchor-id)
              (:url document))}))
 
 (defn page-entry [document]

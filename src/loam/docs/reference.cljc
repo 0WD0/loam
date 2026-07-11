@@ -141,7 +141,7 @@
       [])))
 
 (defn- anchor-base [prefix value]
-  (some-> (str prefix " " value) anchor/fragment-id str/lower-case))
+  (anchor/ascii-slug (str prefix " " value)))
 
 (defn- unique-anchor [seen scope base]
   (let [key [scope base]
@@ -202,7 +202,7 @@
                     (anchor/docs-anchor-kind node)
                     :generated-reference)
      :explicit-anchor? source-anchor-explicit?
-     :href (str (:page/route page) "#" source-anchor)
+     :href (anchor/with-fragment (:page/route page) source-anchor)
      :reference/source? true
      :reference/specs specs}))
 

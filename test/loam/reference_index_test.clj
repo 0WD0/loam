@@ -2,7 +2,9 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [loam.compile :as compile]
-            [loam.docs-fixtures :as fixtures]))
+            [loam.docs-fixtures :as fixtures])
+  (:import [java.net URI URLDecoder]
+           [java.nio.charset StandardCharsets]))
 
 (defn- index-page [title custom-id path code]
   (fixtures/headline 1 title
@@ -13,7 +15,14 @@
                      (fixtures/section)))
 
 (defn- reference-input []
-  (let [entries
+  (let [explicit-unicode
+        (assoc-in
+         (fixtures/description-item
+          "Key: 中文 (majutsu-unicode)"
+          (fixtures/paragraph "Use a Unicode key label."))
+         [:properties :CUSTOM_ID]
+         "显式%anchor")
+        entries
         (fixtures/description-list
          (fixtures/description-item
           "Key: C-c C-c (majutsu-save)"
@@ -21,6 +30,16 @@
          (fixtures/description-item
           "Key: --"
           (fixtures/paragraph "Open the path selector."))
+         (fixtures/description-item
+          "Key: % (majutsu-percent)"
+          (fixtures/paragraph "Use the percent key."))
+         (fixtures/description-item
+          "Key: [[ (majutsu-bracket)"
+          (fixtures/paragraph "Use bracket keys."))
+         (fixtures/description-item
+          "Key: ` (majutsu-backtick)"
+          (fixtures/paragraph "Use the backtick key."))
+         explicit-unicode
          (fixtures/description-item
           "Command: majutsu-open / majutsu-close"
           (fixtures/paragraph
@@ -55,6 +74,17 @@
                          "reference/variables" "vr"))]
     (fixtures/envelope-input "docs/references.org" ast)))
 
+(defn- html-ids [html]
+  (mapv second (re-seq #"(?:^|\s)id=\"([^\"]+)\"" html)))
+
+(defn- hrefs [html]
+  (mapv second (re-seq #"(?:^|\s)href=\"([^\"]+)\"" html)))
+
+(defn- decoded-fragment [href]
+  (let [raw (.getRawFragment (URI. href))]
+    (when raw
+      (URLDecoder/decode raw (.name StandardCharsets/UTF_8)))))
+
 (deftest builds-linked-reference-pages-from-explicit-description-terms
   (let [result (compile/compile-documents [(reference-input)] fixtures/compile-opts)
         references (get-in result [:index :references])
@@ -64,14 +94,22 @@
                                       "pages/reference-functions-commands.html"])
         variable-html (get-in result [:artifacts :fragments "pages/reference-variables.html"])]
     (is (= :ok (:status result)) (:diagnostics result))
-    (is (= {"ky" 2 "fn" 3 "vr" 1}
+    (is (= {"ky" 6 "fn" 7 "vr" 1}
            (into {} (map (fn [[code entries]] [code (count entries)]) references))))
     (is (str/includes? source-html
-                       "id=\"ref-source-key:-c-c-c-c-(majutsu-save)\""))
+                       "id=\"ref-source-key-x3a-c-c-c-c-x28-majutsu-save-x29\""))
     (is (str/includes? key-html
-                       "href=\"/docs/dev/guide/workflow/#ref-source-key:-c-c-c-c-(majutsu-save)\""))
+                       "href=\"/docs/dev/guide/workflow/#ref-source-key-x3a-c-c-c-c-x28-majutsu-save-x29\""))
     (is (str/includes? key-html "<kbd>C-c C-c</kbd>"))
-    (is (str/includes? key-html "data-reference-count=\"2\""))
+    (is (str/includes? key-html "data-reference-count=\"6\""))
+    (is (str/includes? source-html "id=\"显式%anchor\""))
+    (is (str/includes?
+         key-html
+         "href=\"/docs/dev/guide/workflow/#%E6%98%BE%E5%BC%8F%25anchor\""))
+    (is (str/includes? key-html "id=\"ref-index-ky-x25\""))
+    (is (str/includes? key-html "id=\"ref-index-ky-x5b-x5b\""))
+    (is (str/includes? key-html "id=\"ref-index-ky-x60\""))
+    (is (str/includes? key-html "id=\"ref-index-ky-u4e2d-u6587\""))
     (doseq [symbol ["majutsu-save" "majutsu-open" "majutsu-close"]]
       (testing symbol
         (is (str/includes? function-html (str "<code>" symbol "</code>")))))
@@ -81,6 +119,22 @@
          variable-html
          "Path to the jj binary (default: &quot;jj&quot;). Bold and italic &lt;safe&gt;."))
     (is (not (str/includes? variable-html "default: ).")))
+    (doseq [html [source-html key-html function-html variable-html]
+            :let [ids (html-ids html)]]
+      (is (= (count ids) (count (set ids))))
+      (doseq [id (filter #(str/starts-with? % "ref-") ids)]
+        (is (re-matches #"[a-z0-9]+(?:-[a-z0-9]+)*" id) id))
+      (doseq [href (hrefs html)]
+        (is (not (re-find #"%(?![0-9A-Fa-f]{2})" href)) href)
+        ;; java.net.URI plus UTF-8 decoding is the JVM equivalent of the
+        ;; browser's URL/decodeURIComponent validation.
+        (is (string? (or (decoded-fragment href) "")) href)))
+    (let [source-id-set (set (html-ids source-html))]
+      (doseq [href (filter #(str/includes? % "/guide/workflow/#")
+                           (concat (hrefs key-html)
+                                   (hrefs function-html)
+                                   (hrefs variable-html)))]
+        (is (contains? source-id-set (decoded-fragment href)) href)))
     (is (= (get-in result [:artifacts :files])
            (get-in (compile/compile-documents [(reference-input)] fixtures/compile-opts)
                    [:artifacts :files])))))

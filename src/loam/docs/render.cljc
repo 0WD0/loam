@@ -4,6 +4,7 @@
   Every accepted node type has an explicit render/hide/reject/defer
   disposition. There is deliberately no unknown-node children fallback."
   (:require [clojure.string :as str]
+            [loam.anchor :as anchor]
             [loam.ast :as ast]
             [loam.diagnostic :as diagnostic]
             [loam.docs.model :as model]
@@ -163,7 +164,7 @@
     [(into [:section section-attrs
             [tag heading-attrs
              [:a {:class "org-heading-anchor"
-                  :href (str "#" (:anchor entry))}
+                  :href (anchor/with-fragment "" (:anchor entry))}
               title]]]
            (render-children ctx node path))]))
 

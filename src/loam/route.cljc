@@ -1,6 +1,7 @@
 (ns loam.route
   "URL and slug helpers."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [loam.anchor :as anchor]))
 
 (defn slugify [s]
   (some-> s
@@ -16,7 +17,7 @@
   ([url] url)
   ([url anchor]
    (if-let [anchor (fragment anchor)]
-     (str url "#" anchor)
+     (anchor/with-fragment url anchor)
      url)))
 
 (defn clean-url [url]

@@ -34,7 +34,7 @@
      :anchor-kind (when-not root? (anchor/docs-anchor-kind node))
      :explicit-anchor? (and (not root?) (anchor/explicit-docs-anchor? node))
      :href (if anchor-id
-             (str (:page/route page) "#" anchor-id)
+             (anchor/with-fragment (:page/route page) anchor-id)
              (:page/route page))}))
 
 (defn- page-root-entry [document page]

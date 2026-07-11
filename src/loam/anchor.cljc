@@ -7,7 +7,84 @@
   one canonical HTML id / URL fragment pipeline so generated href values
   and rendered id attributes always match."
   (:require [clojure.string :as str]
-            [loam.ast :as ast]))
+            [loam.ast :as ast])
+  #?(:clj (:import [java.nio.charset StandardCharsets])))
+
+(def ^:private hex-digits "0123456789ABCDEF")
+
+(defn- code-unit [character]
+  #?(:clj (int character)
+     :cljs (.charCodeAt (str character) 0)))
+
+(defn- hex-code [value]
+  #?(:clj (Integer/toHexString value)
+     :cljs (.toString value 16)))
+
+(defn ascii-slug
+  "Return a deterministic URL-safe ASCII slug.
+
+  ASCII letters/digits are retained, whitespace and ordinary separators
+  become `-`, punctuation is represented by an `xHEX` token, and non-ASCII
+  UTF-16 code units by `uHEX`. The result always matches
+  `[a-z0-9]+(?:-[a-z0-9]+)*` when non-nil."
+  [value]
+  (when (some? value)
+    (let [raw (->> (str value)
+                   seq
+                   (map (fn [character]
+                          (let [text (str character)
+                                code (code-unit character)]
+                            (cond
+                              (re-matches #"[A-Za-z0-9]" text)
+                              (str/lower-case text)
+
+                              (or (re-matches #"\s" text)
+                                  (contains? #{"-" "_"} text))
+                              "-"
+
+                              (<= code 0x7f) (str "-x" (hex-code code) "-")
+                              :else (str "-u" (hex-code code) "-")))))
+                   (apply str))]
+      (some-> raw
+              (str/replace #"-+" "-")
+              (str/replace #"^-+|-+$" "")
+              not-empty))))
+
+(defn- unreserved-byte? [value]
+  (or (<= 65 value 90)
+      (<= 97 value 122)
+      (<= 48 value 57)
+      (contains? #{45 46 95 126} value)))
+
+(defn- encode-byte [value]
+  (if (unreserved-byte? value)
+    #?(:clj (str (char value))
+       :cljs (js/String.fromCharCode value))
+    (str "%"
+         (nth hex-digits (bit-shift-right value 4))
+         (nth hex-digits (bit-and value 0x0f)))))
+
+(defn percent-encode-fragment
+  "Percent-encode FRAGMENT as UTF-8 using the RFC 3986 unreserved set."
+  [fragment]
+  (when (some? fragment)
+    #?(:clj
+       (apply str
+              (map #(encode-byte (bit-and 0xff %))
+                   (.getBytes (str fragment) StandardCharsets/UTF_8)))
+       :cljs
+       (-> (js/encodeURIComponent (str fragment))
+           ;; encodeURIComponent leaves these five reserved characters raw.
+           (str/replace #"[!'()*]"
+                        (fn [value]
+                          (encode-byte (.charCodeAt value 0))))))))
+
+(defn with-fragment
+  "Append a percent-encoded URL fragment while leaving the DOM id unchanged."
+  [url fragment]
+  (if (some? fragment)
+    (str url "#" (percent-encode-fragment fragment))
+    url))
 
 (defn normalize-space
   "Trim S and collapse internal whitespace to a single ASCII space."
@@ -34,7 +111,7 @@
 (defn fragment-href
   "Return `#fragment` for VALUE after canonicalization, or nil."
   [value]
-  (some-> value fragment-id (->> (str "#"))))
+  (some->> value fragment-id (with-fragment "")))
 
 (defn anchor-kind
   "Return the semantic anchor kind for NODE.
@@ -80,11 +157,17 @@
   ([_kind value]
    (fragment-id value)))
 
+(declare canonical-title-id)
+
 (defn node-anchor-id
   "Return NODE's canonical rendered HTML id, or nil."
   [node]
   (when-let [value (node-anchor-value node)]
-    (anchor-id (anchor-kind node) value)))
+    (if (and (= :headline (:type node))
+             (not (:ID (ast/props node)))
+             (not (:CUSTOM_ID (ast/props node))))
+      (canonical-title-id value)
+      (anchor-id (anchor-kind node) value))))
 
 (defn resolved-anchor-id
   "Return the canonical anchor id described by a link `:resolved` map."
@@ -114,7 +197,7 @@
 (defn local-href
   "Return a local `#...` href for internal LINK-PROPS, or nil."
   [link-props]
-  (some-> link-props link-anchor-id (->> (str "#"))))
+  (some->> link-props link-anchor-id (with-fragment "")))
 
 (defn canonical-title-id
   "Canonical generated anchor for a headline title in the docs compiler.
@@ -126,9 +209,7 @@
           fragment-id
           str/lower-case
           (str/replace #"[()\[\]{}:;,!@$%^*+=|~]+" "-")
-          (str/replace #"-+" "-")
-          (str/replace #"^-+|-+$" "")
-          not-empty))
+          ascii-slug))
 
 (defn docs-anchor-kind
   "Anchor precedence for logical docs pages: CUSTOM_ID, ID, explicit target,
