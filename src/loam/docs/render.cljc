@@ -13,12 +13,6 @@
 (def allowed-special-blocks
   #{"note" "tip" "warning" "danger" "experimental" "compatibility"})
 
-(def inline-node-types
-  #{:bold :citation :citation-reference :code :entity :export-snippet
-    :footnote-reference :italic :latex-fragment :line-break :link :macro
-    :radio-target :statistics-cookie :strike-through :subscript :superscript
-    :target :timestamp :underline :verbatim})
-
 (def default-dispositions
   {:org-data :render
    :section :render
@@ -120,6 +114,38 @@
         level (or (:level (ast/props node)) (inc root-level))]
     (max 2 (inc (- level root-level)))))
 
+(declare render-secondary)
+
+(defn- render-secondary-children [node]
+  (mapcat render-secondary (ast/children node)))
+
+(defn- render-secondary [value]
+  (cond
+    (nil? value) []
+    (string? value) [value]
+    (sequential? value) (mapcat render-secondary value)
+    (not (ast/node? value)) [(str value)]
+    :else
+    (let [rendered
+          (case (:type value)
+            :anonymous (render-secondary-children value)
+            :bold [(hiccup :strong (render-secondary-children value))]
+            :italic [(hiccup :em (render-secondary-children value))]
+            :underline [(hiccup :span {:class "org-underline"}
+                                (render-secondary-children value))]
+            :strike-through [(hiccup :del (render-secondary-children value))]
+            :code [[:code (node-value value)]]
+            :verbatim [[:code {:class "org-verbatim"} (node-value value)]]
+            :subscript [(hiccup :sub (render-secondary-children value))]
+            :superscript [(hiccup :sup (render-secondary-children value))]
+            :entity [(or (:utf-8 (ast/props value)) (:name (ast/props value)) "")]
+            :line-break [" "]
+            :link (render-secondary-children value)
+            [(ast/text value)])]
+      (if-let [spacing (ast/post-blank-text value)]
+        (conj (vec rendered) spacing)
+        rendered))))
+
 (defn- headline-renderer [ctx node path]
   (let [entry (get-in (:index ctx) [:entries (model/node-key (:source ctx) path)])
         depth (heading-depth ctx node)
@@ -132,7 +158,8 @@
                         (and (:development? ctx)
                              (get-in entry [:source-span :start :line]))
                         (assoc :data-source-line (get-in entry [:source-span :start :line])))
-        title (or (ast/node-title node) "")]
+        title (or (seq (render-secondary (get-in node [:properties :title])))
+                  [(or (ast/node-title node) "")])]
     [(into [:section section-attrs
             [tag heading-attrs
              [:a {:class "org-heading-anchor"
@@ -314,11 +341,9 @@
                    :defer [[:span {:class "org-deferred" :data-org-deferred (name type)}]]
                    ;; Unknown/reject diagnostics are emitted by the coverage pass.
                    [])
-        post-blank (get-in node [:properties :post-blank])]
-    (if (and (contains? inline-node-types type)
-             (integer? post-blank)
-             (pos? post-blank))
-      (conj (vec rendered) (apply str (repeat post-blank " ")))
+        spacing (ast/post-blank-text node)]
+    (if spacing
+      (conj (vec rendered) spacing)
       rendered)))
 
 (defn render-page

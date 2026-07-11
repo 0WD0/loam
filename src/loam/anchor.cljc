@@ -122,7 +122,13 @@
   Explicit Org identifiers retain their authored case; title-only anchors are
   lower-case slugs so their generated form is predictable."
   [title]
-  (some-> title fragment-id str/lower-case))
+  (some-> title
+          fragment-id
+          str/lower-case
+          (str/replace #"[()\[\]{}:;,!@$%^*+=|~]+" "-")
+          (str/replace #"-+" "-")
+          (str/replace #"^-+|-+$" "")
+          not-empty))
 
 (defn docs-anchor-kind
   "Anchor precedence for logical docs pages: CUSTOM_ID, ID, explicit target,

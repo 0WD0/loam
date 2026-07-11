@@ -23,10 +23,22 @@
           (fixtures/paragraph "Open the path selector."))
          (fixtures/description-item
           "Command: majutsu-open / majutsu-close"
-          (fixtures/paragraph "Open or close the view."))
+          (fixtures/paragraph
+           "Target remote branch ("
+           {:type :code :properties {:value "--remote-branch"} :contents []}
+           ")."))
          (fixtures/description-item
           "User Option: majutsu-program"
-          (fixtures/paragraph "The jj executable."))
+          (fixtures/paragraph
+           "Path to the "
+           {:type :code :properties {:value "jj" :post-blank 1} :contents []}
+           "binary (default: "
+           {:type :verbatim :properties {:value "\"jj\""} :contents []}
+           "). "
+           {:type :bold :properties {:post-blank 1} :contents ["Bold"]}
+           "and "
+           {:type :italic :properties {} :contents ["italic <safe>"]}
+           "."))
          (fixtures/description-item
           "Face: majutsu-warning"
           (fixtures/paragraph
@@ -63,8 +75,12 @@
     (doseq [symbol ["majutsu-save" "majutsu-open" "majutsu-close"]]
       (testing symbol
         (is (str/includes? function-html (str "<code>" symbol "</code>")))))
+    (is (str/includes? function-html "Target remote branch (--remote-branch)."))
     (is (str/includes? variable-html "<code>majutsu-program</code>"))
-    (is (str/includes? variable-html "The jj executable."))
+    (is (str/includes?
+         variable-html
+         "Path to the jj binary (default: &quot;jj&quot;). Bold and italic &lt;safe&gt;."))
+    (is (not (str/includes? variable-html "default: ).")))
     (is (= (get-in result [:artifacts :files])
            (get-in (compile/compile-documents [(reference-input)] fixtures/compile-opts)
                    [:artifacts :files])))))

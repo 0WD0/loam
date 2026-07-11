@@ -305,18 +305,24 @@
 
 (defn- manifest-page [page rendered digest content-file]
   (let [source (:page/source page)]
-    {:id (:page/id page)
-     :path (:page/path page)
-     :version (:page/version page)
-     :route (:page/route page)
-     :title (:page/title page)
-     :description (or (:page/description page) "")
-     :contentFile content-file
-     :digest digest
-     :source (cond-> {:path (:path source)}
-               (:start-line source) (assoc :startLine (:start-line source))
-               (:end-line source) (assoc :endLine (:end-line source)))
-     :headings (:headings rendered)}))
+    (cond-> {:id (:page/id page)
+             :path (:page/path page)
+             :version (:page/version page)
+             :route (:page/route page)
+             :title (:page/title page)
+             :description (or (:page/description page) "")
+             :contentFile content-file
+             :digest digest
+             :source (cond-> {:path (:path source)}
+                       (:start-line source) (assoc :startLine (:start-line source))
+                       (:end-line source) (assoc :endLine (:end-line source)))
+             :headings (:headings rendered)
+             :order (vec (:page/order page))
+             :childIds (vec (:page/children page))}
+      (:page/parent page) (assoc :parentId (:page/parent page))
+      (:page/previous page) (assoc :previousId (:page/previous page))
+      (:page/next page) (assoc :nextId (:page/next page))
+      (:page/landing? page) (assoc :landing true))))
 
 (defn- vcs-map [opts]
   (let [vcs (get-in opts [:build :vcs])]
@@ -407,7 +413,7 @@
                               :contentHash content-hash
                               :unreleasable unreleasable?}
                       :pages page-models
-                      :navigation (vec (or (:navigation opts) []))
+                      :navigation (model/navigation-tree pages)
                       :redirects (vec (or (:redirects opts) []))
                       :diagnostics (mapv public-diagnostic diagnostics)}
             report {:schemaVersion 1

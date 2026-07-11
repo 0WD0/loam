@@ -256,3 +256,27 @@
 
 (defn owned? [partition page source path]
   (= (:page/id page) (owner-id partition source path)))
+
+(defn navigation-tree
+  "Derive deterministic public navigation from the logical page-root tree.
+
+  Pages are already in authored preorder.  Landing pages, when present, are
+  roots whose children are the document's top-level page roots; nested page
+  roots remain children of their nearest owning page root."
+  [pages]
+  (let [by-id (into {} (map (juxt :page/id identity) pages))]
+    (letfn [(node [page]
+              (cond-> {:id (:page/id page)
+                       :title (:page/title page)
+                       :path (:page/path page)
+                       :route (:page/route page)
+                       :order (vec (:page/order page))
+                       :children (mapv (fn [id]
+                                         (node (or (get by-id id)
+                                                   (throw (ex-info
+                                                           "Navigation child page is missing"
+                                                           {:page-id (:page/id page)
+                                                            :child-id id})))))
+                                       (:page/children page))}
+                (:page/landing? page) (assoc :landing true)))]
+      (mapv node (remove :page/parent pages)))))

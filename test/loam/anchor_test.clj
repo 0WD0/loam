@@ -37,6 +37,11 @@
   (is (= "generated-title"
          (anchor/docs-anchor-id {:type :headline
                                  :properties {:raw-value "Generated Title"}})))
+  (is (= "face-policy-face"
+         (anchor/canonical-title-id "Face Policy (:face)")))
+  (is (= "understanding-revisions"
+         (anchor/canonical-title-id "Understanding --revisions")))
+  (is (= "中文-标题" (anchor/canonical-title-id "中文 标题")))
   (is (anchor/explicit-docs-anchor?
        {:type :target :properties {:value "Explicit target"}}))
   (is (not (anchor/explicit-docs-anchor?
