@@ -1,0 +1,8 @@
+#+title: Minimal envelope fixture
+
+* Hello
+:PROPERTIES:
+:CUSTOM_ID: hello
+:END:
+
+Hello, ox-edn.

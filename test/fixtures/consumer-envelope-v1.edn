@@ -1,0 +1,38 @@
+{:ox-edn/schema-version 1
+ :ox-edn/exporter
+ {:name "ox-edn"
+  :version "0.3.0"
+  :emacs-version "29.1"
+  :org-version "9.6.15"
+  :property-policy-version 1
+  :skipped-properties
+  [:buffer :cached :deferred :granularity :mode
+   :org-element--cache-sync-key :parent :robust-begin :robust-end
+   :secondary :standard-properties :structure :true-level]}
+ :ox-edn/source
+ {:path "test/fixtures/minimal.org"
+  :sha256 "d9c591eec2cda2c5af741896200ff93c76ac43b2f306e2b3a51c783b73e7b613"
+  :encoding "utf-8"}
+ :ox-edn/document
+ {:type :org-data
+  :properties
+  {:begin 1
+   :end 97
+   :path "test/fixtures/minimal.org"}
+  :contents
+  [{:type :headline
+    :properties
+    {:begin 36
+     :end 97
+     :level 1
+     :raw-value "Hello"
+     :CUSTOM_ID "hello"
+     :title {:type :anonymous :contents ["Hello"]}}
+    :contents
+    [{:type :section
+      :properties {:begin 44 :end 97}
+      :contents
+      [{:type :paragraph
+        :properties {:begin 82 :end 97}
+        :contents ["Hello, ox-edn.\n"]}]}]}]}
+ :ox-edn/diagnostics []}

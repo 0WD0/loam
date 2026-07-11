@@ -1,0 +1,17 @@
+#+title: Minimal
+
+* Introduction
+:PROPERTIES:
+:CUSTOM_ID: introduction
+:EXPORT_FILE_NAME: guide/introduction
+:DESCRIPTION: Start here.
+:END:
+See [[#installation][Installation]].
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:EXPORT_FILE_NAME: guide/installation
+:DESCRIPTION: Install it.
+:END:
+Install Majutsu.

@@ -1,0 +1,56 @@
+{:ox-edn/schema-version 1
+ :ox-edn/exporter
+ {:name "ox-edn"
+  :version "0.3.0"
+  :emacs-version "29.1"
+  :org-version "9.6"}
+ :ox-edn/source
+ {:path "test/fixtures/ox-edn/minimal.org"
+  :sha256 "195606a20e7d67668a8b9d71e276a5e9a4859b443a88208cdbd90df1f7b1b9e6"
+  :encoding "utf-8"}
+ :ox-edn/document
+ {:type :org-data
+  :properties {:begin 1 :end 320 :TITLE "Minimal"}
+  :contents
+  [{:type :keyword
+    :properties {:begin 1 :end 17 :key "TITLE" :value "Minimal"}}
+   {:type :headline
+    :properties {:begin 19
+                 :end 180
+                 :level 1
+                 :raw-value "Introduction"
+                 :CUSTOM_ID "introduction"
+                 :EXPORT_FILE_NAME "guide/introduction"
+                 :DESCRIPTION "Start here."}
+    :contents
+    [{:type :section
+      :properties {:begin 142 :end 179}
+      :contents
+      [{:type :paragraph
+        :properties {:begin 142 :end 179}
+        :contents
+        ["See "
+         {:type :link
+          :properties {:begin 146
+                       :end 177
+                       :type "custom-id"
+                       :path "installation"
+                       :raw-link "#installation"}
+          :contents ["Installation"]}
+         "."]}]}]}
+   {:type :headline
+    :properties {:begin 180
+                 :end 320
+                 :level 1
+                 :raw-value "Installation"
+                 :CUSTOM_ID "installation"
+                 :EXPORT_FILE_NAME "guide/installation"
+                 :DESCRIPTION "Install it."}
+    :contents
+    [{:type :section
+      :properties {:begin 303 :end 320}
+      :contents
+      [{:type :paragraph
+        :properties {:begin 303 :end 320}
+        :contents ["Install Majutsu."]}]}]}]}
+ :ox-edn/diagnostics []}

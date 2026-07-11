@@ -49,7 +49,25 @@
                         :extend into})
    :hooks (service-type {:default {}
                          :compose compose-hooks
-                         :extend merge-hooks})})
+                         :extend merge-hooks})
+   ;; Compiler phases are vector targets on purpose: extensions can add
+   ;; validation and transformation passes without replacing the compiler.
+   ;; Static-site systems simply leave these targets empty.
+   :validators (service-type {:default []
+                              :compose compose-vector
+                              :extend into})
+   :document-transforms (service-type {:default []
+                                       :compose compose-vector
+                                       :extend into})
+   :page-partitioners (service-type {:default []
+                                     :compose compose-vector
+                                     :extend into})
+   :diagnostic-rules (service-type {:default []
+                                    :compose compose-vector
+                                    :extend into})
+   :emitters (service-type {:default []
+                            :compose compose-vector
+                            :extend into})})
 
 (defn extension
   "Create an extension that contributes VALUES to service targets."
@@ -67,7 +85,12 @@
     :layouts
     :assets
     :head
-    :hooks})
+    :hooks
+    :validators
+    :document-transforms
+    :page-partitioners
+    :diagnostic-rules
+    :emitters})
 
 (defn- legacy-extension-shape [extension]
   (seq (filter #(contains? legacy-extension-keys %) (keys extension))))

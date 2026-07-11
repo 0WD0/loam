@@ -45,3 +45,17 @@
     (catch clojure.lang.ExceptionInfo error
       (is (= "Legacy Loam extension shape not supported" (ex-message error)))
       (is (= {:extension :legacy :keys [:renderers]} (ex-data error))))))
+
+(deftest folds-docs-compiler-service-targets
+  (let [extension {:id :compiler
+                   :extends {:validators [:validate]
+                             :document-transforms [:normalize]
+                             :page-partitioners [:partition]
+                             :diagnostic-rules [:diagnose]
+                             :emitters [:emit]}}
+        system (loam/create-system {:extensions [extension]})]
+    (is (= [:validate] (:validators system)))
+    (is (= [:normalize] (:document-transforms system)))
+    (is (= [:partition] (:page-partitioners system)))
+    (is (= [:diagnose] (:diagnostic-rules system)))
+    (is (= [:emit] (:emitters system)))))

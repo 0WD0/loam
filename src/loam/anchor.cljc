@@ -115,3 +115,46 @@
   "Return a local `#...` href for internal LINK-PROPS, or nil."
   [link-props]
   (some-> link-props link-anchor-id (->> (str "#"))))
+
+(defn canonical-title-id
+  "Canonical generated anchor for a headline title in the docs compiler.
+
+  Explicit Org identifiers retain their authored case; title-only anchors are
+  lower-case slugs so their generated form is predictable."
+  [title]
+  (some-> title fragment-id str/lower-case))
+
+(defn docs-anchor-kind
+  "Anchor precedence for logical docs pages: CUSTOM_ID, ID, explicit target,
+  then a generated canonical headline slug."
+  [node]
+  (let [p (ast/props node)]
+    (cond
+      (:CUSTOM_ID p) :custom-id
+      (:ID p) :id
+      (= :target (:type node)) :target
+      (= :radio-target (:type node)) :radio-target
+      (= :headline (:type node)) :generated-title
+      (or (:name p) (:NAME p)) :name
+      :else nil)))
+
+(defn docs-anchor-id
+  "Return the logical docs anchor for NODE using stable-anchor precedence."
+  [node]
+  (let [p (ast/props node)
+        kind (docs-anchor-kind node)]
+    (case kind
+      :custom-id (anchor-id :custom-id (:CUSTOM_ID p))
+      :id (anchor-id :id (:ID p))
+      :target (anchor-id :target (:value p))
+      :radio-target (anchor-id :radio-target (:value p))
+      :generated-title (canonical-title-id (ast/node-title node))
+      :name (anchor-id :name (or (:name p) (:NAME p)))
+      nil)))
+
+(defn explicit-docs-anchor?
+  "True when NODE's docs anchor was explicitly authored rather than generated
+  from a headline title."
+  [node]
+  (contains? #{:custom-id :id :target :radio-target :name}
+             (docs-anchor-kind node)))

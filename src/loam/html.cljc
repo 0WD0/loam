@@ -39,6 +39,7 @@
     :else (str " " (name k) "=\"" (escape-html v) "\"")))
 
 (declare render-html)
+(declare render-canonical-html)
 
 (defn- render-element [[tag & body]]
   (let [{tag-name :tag} (parse-tag tag)
@@ -59,6 +60,31 @@
     (number? x) (str x)
     (vector? x) (render-element x)
     (seq? x) (apply str (map render-html x))
+    :else (escape-html x)))
+
+(defn- render-canonical-element [[tag & body]]
+  (let [{tag-name :tag} (parse-tag tag)
+        [attrs children] (if (map? (first body))
+                           [(first body) (rest body)]
+                           [{} body])
+        attrs (merge-tag-attrs tag attrs)
+        ordered-attrs (sort-by (comp name key) attrs)
+        open (str "<" tag-name (apply str (keep render-attr ordered-attrs)) ">")]
+    (if (void-tags tag-name)
+      open
+      (str open (apply str (map render-canonical-html children)) "</" tag-name ">"))))
+
+(defn render-canonical-html
+  "Deterministic Hiccup renderer used for content-addressed compiler fragments.
+  Attribute order is lexical; legacy `render-html` keeps insertion behavior."
+  [x]
+  (cond
+    (nil? x) ""
+    (string? x) (escape-html x)
+    (keyword? x) (escape-html (name x))
+    (number? x) (str x)
+    (vector? x) (render-canonical-element x)
+    (seq? x) (apply str (map render-canonical-html x))
     :else (escape-html x)))
 
 (defn document [hiccup]

@@ -2,5 +2,7 @@
  :tasks
  {test {:doc "Run all tests"
         :task (exec 'loam.test-runner/-main)}
+  docs {:doc "Compile ox-edn Envelope v1 files into Manifest v1 fragments"
+        :task (apply clojure "-M -m loam.emit.starlight" *command-line-args*)}
   build {:doc "Build a static site from EDN files"
          :task (apply clojure "-M -m loam.site" *command-line-args*)}}}

@@ -27,3 +27,17 @@
                              :resolved {:resolved-type :radio-target
                                         :resolved-value "Radio B"}})))
   (is (nil? (anchor/local-href {:type "https" :path "example.com"}))))
+
+(deftest docs-anchors-use-stability-precedence
+  (is (= "custom"
+         (anchor/docs-anchor-id {:type :headline
+                                 :properties {:CUSTOM_ID "custom"
+                                              :ID "id"
+                                              :raw-value "Title"}})))
+  (is (= "generated-title"
+         (anchor/docs-anchor-id {:type :headline
+                                 :properties {:raw-value "Generated Title"}})))
+  (is (anchor/explicit-docs-anchor?
+       {:type :target :properties {:value "Explicit target"}}))
+  (is (not (anchor/explicit-docs-anchor?
+            {:type :headline :properties {:raw-value "Generated"}}))))

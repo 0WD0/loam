@@ -1,0 +1,48 @@
+[{:title "Introduction"
+  :custom-id "introduction"
+  :export-file-name "guide/introduction"}
+ {:title "Installation"
+  :custom-id "installation"
+  :export-file-name "guide/installation"}
+ {:title "Getting Started"
+  :custom-id "getting-started"
+  :export-file-name "guide/getting-started"}
+ {:title "Interface Concepts"
+  :custom-id "interface-concepts"
+  :export-file-name "guide/interface-concepts"}
+ {:title "Inspecting"
+  :custom-id "inspecting"
+  :export-file-name "workflows/inspecting"}
+ {:title "Manipulating"
+  :custom-id "manipulating"
+  :export-file-name "workflows/manipulating"}
+ {:title "Conflict Resolution"
+  :custom-id "conflict-resolution"
+  :export-file-name "workflows/conflict-resolution"}
+ {:title "Bookmarks"
+  :custom-id "bookmarks"
+  :export-file-name "repository/bookmarks"}
+ {:title "Tags"
+  :custom-id "tags"
+  :export-file-name "repository/tags"}
+ {:title "Git Integration"
+  :custom-id "git-integration"
+  :export-file-name "repository/git-integration"}
+ {:title "Workspaces"
+  :custom-id "workspaces"
+  :export-file-name "repository/workspaces"}
+ {:title "Customizing"
+  :custom-id "customizing"
+  :export-file-name "extend/customizing"}
+ {:title "Template DSL"
+  :custom-id "template-dsl"
+  :export-file-name "extend/template-dsl"}
+ {:title "Keystroke Index"
+  :custom-id "keystroke-index"
+  :export-file-name "reference/keystrokes"}
+ {:title "Function and Command Index"
+  :custom-id "function-command-index"
+  :export-file-name "reference/functions-commands"}
+ {:title "Variable Index"
+  :custom-id "variable-index"
+  :export-file-name "reference/variables"}]

@@ -64,12 +64,45 @@ npm run serve
 
 注意：默认高亮 provider 是 Shiki。若显式启用 Tree-sitter WASM，高亮需要通过 HTTP 服务访问。不要直接用浏览器打开 =file://.../index.html= ，否则浏览器通常会阻止 =fetch= / WASM / ESM 资源加载。
 
+* Docs compiler：Envelope v1 → Starlight Manifest v1
+
+=loam.emit.starlight= 是独立于默认 Loam 站点构建器的严格 docs compiler 边界。它读取 ox-edn Envelope v1，用 envelope 中的仓库相对路径读取并校验真实 Org 源文件，执行 =load → validate → normalize → partition → index → resolve → render → emit=，然后原子替换完整输出 generation。
+
+在一个 jj workspace 中运行：
+
+#+begin_src bash
+npm run docs:compile -- \
+  --repo-root /path/to/majutsu \
+  --output-dir /path/to/majutsu/.cache/majutsu-docs \
+  /path/to/ox-edn-output/index.edn \
+  /path/to/ox-edn-output/majutsu.edn
+#+end_src
+
+CLI 默认从 =--repo-root= 的当前 jj change 读取 manifest 所需的 change ID 与 commit ID；CI 也可成对传入 =--vcs-change-id= 和 =--vcs-commit-id=。可选的 =--base=、=--version= 和 =--locale= 控制最终 route。成功输出包含 =manifest.json=、=build-report.json= 与 =pages/*.html=；blocking error 不发布新 generation，defer warning 会把 manifest/report 标为 =unreleasable=true=。
+
+Clojure 调用边界是 =loam.emit.starlight/compile-envelope-files!=：
+
+#+begin_src clojure
+(require '[loam.emit.starlight :as starlight])
+
+(starlight/compile-envelope-files!
+ "/path/to/majutsu"
+ ["/path/to/ox-edn-output/majutsu.edn"]
+ {:output-dir "/path/to/majutsu/.cache/majutsu-docs"
+  :build {:vcs {:system "jj"
+                :changeId "..."
+                :commitId "..."}}})
+#+end_src
+
+Envelope fixture、golden HTML fragment 与原子替换回归测试分别位于 =test/fixtures/consumer-envelope-v1.edn=、=test/fixtures/golden/minimal-fragment.edn= 和 =test/loam/emit_starlight_test.clj=。Manifest 只公开仓库相对 source path；本机绝对路径会令编译失败。
+
 * 常用命令
 
 | 命令 | 作用 |
 |------+------|
 | =npm install= | 安装 npm 依赖；不会自动构建 Tree-sitter WASM |
 | =npm test= | 运行 Clojure 测试 |
+| =npm run docs:compile -- ...= | 把 ox-edn Envelope v1 编译为 Manifest v1 与 HTML fragments |
 | =npm run copy-tree-sitter-assets= | 用 Guix 构建并同步 Tree-sitter runtime、WASM、query、license、manifest |
 | =npm run smoke-tree-sitter-assets= | 加载本地 Tree-sitter WASM 资产并做解析/query smoke test |
 | =npm run client:release= | 用 =shadow-cljs= 编译 Loam 浏览器端客户端 |

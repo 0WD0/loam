@@ -12,6 +12,7 @@
     "cljs:release": "npm run client:release",
     "prepare-assets": "npm run client:release",
     "test": "bb test",
+    "docs:compile": "bb docs",
     "build": "npm run prepare-assets && bb build",
     "site": "npm run build",
     "serve": "python3 -m http.server 8070 --directory build/site"
