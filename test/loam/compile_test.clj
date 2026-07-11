@@ -109,6 +109,24 @@
     (is (str/includes? fragment "data-org-deferred=\"latex-fragment\""))
     (is (not (str/includes? fragment "$x$")))))
 
+(deftest preserves-inline-post-blank-whitespace
+  (let [verbatim {:type :verbatim
+                  :properties {:value "jj" :post-blank 1}
+                  :contents []}
+        ast (fixtures/document "Whitespace"
+                               (fixtures/page "Whitespace" "whitespace" "guide/whitespace"
+                                              (fixtures/section
+                                               (fixtures/paragraph
+                                                "Use the " verbatim "CLI."))))
+        result (compile/compile-documents
+                [(fixtures/envelope-input "docs/whitespace.org" ast)]
+                fixtures/compile-opts)
+        fragment (get-in result [:artifacts :fragments "pages/guide-whitespace.html"])]
+    (is (= :ok (:status result)) (:diagnostics result))
+    (is (str/includes? fragment
+                       "Use the <code class=\"org-verbatim\">jj</code> CLI."))
+    (is (not (str/includes? fragment "</code>CLI")))))
+
 (deftest compiler-service-targets-compose-through-the-pipeline
   (let [extension
         {:id :test/compiler-phases

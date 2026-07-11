@@ -12,6 +12,12 @@
 (def allowed-special-blocks
   #{"note" "tip" "warning" "danger" "experimental" "compatibility"})
 
+(def inline-node-types
+  #{:bold :citation :citation-reference :code :entity :export-snippet
+    :footnote-reference :italic :latex-fragment :line-break :link :macro
+    :radio-target :statistics-cookie :strike-through :subscript :superscript
+    :target :timestamp :underline :verbatim})
+
 (def default-dispositions
   {:org-data :render
    :section :render
@@ -285,21 +291,27 @@
 
 (defn- render-node [ctx node path]
   (let [type (:type node)
-        disposition (get (:dispositions ctx) type :unknown)]
-    (case disposition
-      :render (if-let [renderer (get (:renderers ctx) type)]
-                (renderer ctx node path)
-                (do
-                  (report! ctx (diagnostic/error :missing-renderer
-                                                 "Render disposition has no renderer function"
-                                                 {:phase :render
-                                                  :document (:document ctx)
-                                                  :node node}))
-                  []))
-      :hide []
-      :defer [[:span {:class "org-deferred" :data-org-deferred (name type)}]]
-      ;; Unknown/reject diagnostics are emitted by the coverage pass.
-      [])))
+        disposition (get (:dispositions ctx) type :unknown)
+        rendered (case disposition
+                   :render (if-let [renderer (get (:renderers ctx) type)]
+                             (renderer ctx node path)
+                             (do
+                               (report! ctx (diagnostic/error :missing-renderer
+                                                              "Render disposition has no renderer function"
+                                                              {:phase :render
+                                                               :document (:document ctx)
+                                                               :node node}))
+                               []))
+                   :hide []
+                   :defer [[:span {:class "org-deferred" :data-org-deferred (name type)}]]
+                   ;; Unknown/reject diagnostics are emitted by the coverage pass.
+                   [])
+        post-blank (get-in node [:properties :post-blank])]
+    (if (and (contains? inline-node-types type)
+             (integer? post-blank)
+             (pos? post-blank))
+      (conj (vec rendered) (apply str (repeat post-blank " ")))
+      rendered)))
 
 (defn render-page
   [partition index resolutions document page opts]
