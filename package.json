@@ -11,7 +11,7 @@
     "client:release": "shadow-cljs release client",
     "cljs:release": "npm run client:release",
     "prepare-assets": "npm run client:release",
-    "test": "bb test",
+    "test": "bb test && node scripts/smoke-docs-cli-exit.mjs",
     "docs:compile": "bb docs",
     "build": "npm run prepare-assets && bb build",
     "site": "npm run build",

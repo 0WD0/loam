@@ -264,13 +264,19 @@
         (println text)))))
 
 (defn -main [& args]
-  (if (some #{"--help" "-h"} args)
-    (println usage)
-    (try
-      (let [summary (compile-cli! (parse-cli-args args))]
-        (println "Compiled docs"
-                 (select-keys summary [:output-dir :files :pages :content-hash
-                                       :unreleasable?])))
-      (catch clojure.lang.ExceptionInfo error
-        (print-cli-error! error)
-        (System/exit 1)))))
+  (try
+    (if (some #{"--help" "-h"} args)
+      (println usage)
+      (try
+        (let [summary (compile-cli! (parse-cli-args args))]
+          (println "Compiled docs"
+                   (select-keys summary [:output-dir :files :pages :content-hash
+                                         :unreleasable?])))
+        (catch clojure.lang.ExceptionInfo error
+          (print-cli-error! error)
+          (System/exit 1))))
+    (finally
+      ;; `jj-vcs` uses clojure.java.shell/sh, whose stream readers run on the
+      ;; non-daemon agent pool. A command-line entry point owns that pool's
+      ;; lifecycle and must stop it after the final result is printed.
+      (shutdown-agents))))
