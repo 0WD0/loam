@@ -1,10 +1,23 @@
+# Build / output
 build/
-.cpcache/
-.lsp/.cache/
-.shadow-cljs/
-.clj-kondo/
 target/
+*.elc
+
+# Clojure tooling caches
+.cpcache/
+.clj-kondo/.cache/
+.clj-kondo/imports/
+.lsp/.cache/
+.nrepl-port
+.portal/
+.calva/
+.clerk/
+
+# Frontend / shadow-cljs
+.shadow-cljs/
 node_modules/
+
+# Local site config & generated assets (not for VCS)
 loam.edn
 public/assets/manifest.edn
 public/assets/tree-sitter/
