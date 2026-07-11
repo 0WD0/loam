@@ -13,6 +13,7 @@
             [loam.html-test]
             [loam.index-test]
             [loam.json-test]
+            [loam.reference-index-test]
             [loam.render-test]
             [loam.route-test]
             [loam.shiki-test]
@@ -34,6 +35,7 @@
                                'loam.html-test
                                'loam.index-test
                                'loam.json-test
+                               'loam.reference-index-test
                                'loam.render-test
                                'loam.route-test
                                'loam.shiki-test

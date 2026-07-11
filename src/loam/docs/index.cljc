@@ -5,6 +5,7 @@
             [loam.ast :as ast]
             [loam.diagnostic :as diagnostic]
             [loam.docs.model :as model]
+            [loam.docs.reference :as reference]
             [loam.route :as route]))
 
 (defn normalize-title [title]
@@ -120,13 +121,14 @@
          (filter #(model/owned? partition page source (:path %)))
          (remove #(= (:path %) (:page/root-path page)))
          (filter (fn [{:keys [node]}]
-                   (or (= :headline (:type node))
-                       (= :target (:type node))
-                       (= :radio-target (:type node))
-                       (some? (:ID (ast/props node)))
-                       (some? (:CUSTOM_ID (ast/props node)))
-                       (some? (:name (ast/props node)))
-                       (some? (:NAME (ast/props node))))))
+                   (and (not (reference/semantic-item? node))
+                        (or (= :headline (:type node))
+                            (= :target (:type node))
+                            (= :radio-target (:type node))
+                            (some? (:ID (ast/props node)))
+                            (some? (:CUSTOM_ID (ast/props node)))
+                            (some? (:name (ast/props node)))
+                            (some? (:NAME (ast/props node)))))))
          (map (fn [location]
                 {:node (:node location)
                  :entry (entry-for document page location)})))))
@@ -148,6 +150,12 @@
                          :assets {}}
                  :diagnostics []}
         with-pages (reduce #(add-page %1 documents-by-source %2) initial pages)
+        reference-index (reference/collect partition)
+        with-node-entries
+        (reduce (fn [state {:keys [document node entry]}]
+                  (add-entry state document node entry))
+                with-pages
+                (:node-entries reference-index))
         result (reduce
                 (fn [state page]
                   (let [document (get documents-by-source (get-in page [:page/source :path]))]
@@ -155,8 +163,9 @@
                               (add-entry state document node entry))
                             state
                             (page-node-entries document page partition))))
-                with-pages
-                pages)]
+                with-node-entries
+                pages)
+        result (assoc-in result [:index :references] (:references reference-index))]
     (update result :index
             (fn [index]
               (-> index

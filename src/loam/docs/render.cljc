@@ -7,6 +7,7 @@
             [loam.ast :as ast]
             [loam.diagnostic :as diagnostic]
             [loam.docs.model :as model]
+            [loam.docs.reference :as reference]
             [loam.html :as html]))
 
 (def allowed-special-blocks
@@ -147,6 +148,7 @@
 
 (defn- item-renderer [ctx node path]
   (let [p (ast/props node)
+        entry (get-in (:index ctx) [:entries (model/node-key (:source ctx) path)])
         checkbox (case (ast/value-name (:checkbox p))
                    "on" [:input {:type "checkbox" :checked true :disabled true}]
                    "off" [:input {:type "checkbox" :disabled true}]
@@ -155,7 +157,13 @@
         children (cond-> [] checkbox (conj checkbox))
         contents (render-children ctx node path)]
     (if-let [tag (:tag p)]
-      [[:dt (ast/text tag)] (into [:dd] (concat children contents))]
+      [(if (:reference/source? entry)
+         [:dt {:id (:anchor entry)
+               :class "org-reference-source-term"
+               :data-reference-source true}
+          (ast/text tag)]
+         [:dt (ast/text tag)])
+       (into [:dd] (concat children contents))]
       [(into [:li] (concat children contents))])))
 
 (defn- special-block-renderer [ctx node path]
@@ -334,11 +342,13 @@
              :development? (:development? opts)}
         root (:page/root-ast page)
         root-path (:page/root-path page)
-        body (if (:page/landing? page)
-               (render-children ctx root root-path)
-               (render-children ctx root root-path))
-        article [:article {:class "org-document"
-                           :data-page-id (:page/id page)} body]
+        reference-section (reference/index-section index page)
+        body (vec (render-children ctx root root-path))
+        body (cond-> body
+               reference-section (conj reference-section))
+        article (into [:article {:class "org-document"
+                                 :data-page-id (:page/id page)}]
+                      body)
         diagnostics @collector
         headings (->> (:locations coverage)
                       (filter #(and (= :headline (:type (:node %)))

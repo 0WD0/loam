@@ -17,6 +17,16 @@
 (defn section [& contents]
   {:type :section :properties {} :contents (vec contents)})
 
+(defn description-item [tag & contents]
+  {:type :item
+   :properties {:tag {:type :anonymous :properties {} :contents [tag]}}
+   :contents (vec contents)})
+
+(defn description-list [& items]
+  {:type :plain-list
+   :properties {:type :descriptive}
+   :contents (vec items)})
+
 (defn link
   ([type path label]
    (link type path label {}))
