@@ -66,9 +66,13 @@
   ;; human qualifiers such as `(Emacs)`, `(Evil)`, and `(Emacs/Evil)`.
   (boolean (re-matches #"[a-z][^\s/()]*-[^\s/()]+" value)))
 
-(defn- key-command-groups [term]
+(defn- key-parenthetical-groups [term]
   (->> (re-seq #"[(]([^()]*)[)]" term)
        (map second)
+       vec))
+
+(defn- key-command-groups [term]
+  (->> (key-parenthetical-groups term)
        (filter #(some command-symbol? (split-symbols %)))
        vec))
 
@@ -76,6 +80,18 @@
   (->> (key-command-groups term)
        (mapcat split-symbols)
        (filter command-symbol?)
+       vec))
+
+(defn- key-scopes [term]
+  (->> (key-parenthetical-groups term)
+       (remove #(some command-symbol? (split-symbols %)))
+       (mapcat #(str/split % #"\s*/\s*"))
+       (keep (fn [scope]
+               (case (some-> scope normalized-text str/lower-case)
+                 "emacs" "Emacs"
+                 "evil" "Evil"
+                 nil)))
+       distinct
        vec))
 
 (defn- key-label [term]
@@ -95,16 +111,19 @@
   (when-let [{:keys [prefix term]} (tag-parts node)]
     (case prefix
       "key"
-      (into [{:reference/index-code "ky"
-              :reference/type :key
-              :reference/term (key-label term)
-              :reference/origin :description-term}]
-            (map (fn [command]
-                   {:reference/index-code "fn"
-                    :reference/type :command
-                    :reference/term command
-                    :reference/origin :key-command})
-                 (key-commands term)))
+      (let [commands (key-commands term)]
+        (into [{:reference/index-code "ky"
+                :reference/type :key
+                :reference/term (key-label term)
+                :reference/commands commands
+                :reference/scopes (key-scopes term)
+                :reference/origin :description-term}]
+              (map (fn [command]
+                     {:reference/index-code "fn"
+                      :reference/type :command
+                      :reference/term command
+                      :reference/origin :key-command})
+                   commands)))
 
       ("command" "commands")
       (mapv (fn [command]
@@ -154,16 +173,24 @@
     (mapcat
      (fn [document]
        (let [source (get-in document [:source :path])]
-         (keep (fn [{:keys [node path]}]
+         (keep (fn [{:keys [node path outline-path]}]
                  (when-let [specs (seq (reference-specs node))]
                    (when-let [page (get page-by-id (model/owner-id partition source path))]
-                     {:document document
-                      :node node
-                      :path path
-                      :page page
-                      :tag (description-term node)
-                      :description (direct-description node)
-                      :specs (vec specs)})))
+                     (let [page-outline (vec (:page/outline-path page))
+                           outline (vec outline-path)
+                           nested (if (and (<= (count page-outline) (count outline))
+                                           (= page-outline
+                                              (subvec outline 0 (count page-outline))))
+                                    (subvec outline (count page-outline))
+                                    [])]
+                       {:document document
+                        :node node
+                        :path path
+                        :page page
+                        :tag (description-term node)
+                        :description (direct-description node)
+                        :context-path (into [(:page/title page)] nested)
+                        :specs (vec specs)}))))
                (model/node-locations document))))
      documents)))
 
@@ -213,12 +240,14 @@
                                :href :anchor])
            {:reference/tag (:tag item)
             :reference/description (:description item)
-            :reference/page-title (get-in item [:page :page/title])}
+            :reference/page-title (get-in item [:page :page/title])
+            :reference/context-path (:context-path item)}
            spec))
         (:specs item)))
 
 (defn- reference-sort-key [entry]
   [(some-> entry :reference/term str/lower-case)
+   (:reference/context-path entry)
    (:page-route entry)
    (or (get-in entry [:source-span :begin])
        #?(:clj Long/MAX_VALUE :cljs js/Number.MAX_SAFE_INTEGER))
@@ -263,20 +292,103 @@
     [:kbd term]
     [:code term]))
 
-(defn- reference-row [code entry]
+(defn- transient-key-term? [term]
+  (->> (str/split term #"\s+/\s+")
+       (some #(str/starts-with? (str/trim %) "-"))
+       boolean))
+
+(defn- transient-context? [context-path]
+  (boolean
+   (some #(re-find #"(?i)\btransient\b" %) context-path)))
+
+(defn- key-reference-kind [{:reference/keys [commands context-path term]}]
+  (cond
+    (seq commands) :command-binding
+    (or (transient-key-term? term)
+        (transient-context? context-path)) :transient-argument
+    :else :key-binding))
+
+(def key-kind-labels
+  {:command-binding "Command binding"
+   :transient-argument "Transient argument"
+   :key-binding "Key binding"})
+
+(defn- context-fact [entry]
+  (let [context (str/join " › " (:reference/context-path entry))]
+    [:li {:class "org-reference-fact org-reference-fact-context"}
+     [:span {:class "org-reference-fact-label"} "Context"]
+     [:a {:href (:href entry)} context]]))
+
+(defn- kind-fact [kind]
+  (let [label (get key-kind-labels kind)]
+    [:li {:class "org-reference-fact"}
+     [:span {:class "org-reference-fact-label"} "Kind"]
+     [:span label]]))
+
+(defn- scope-fact [scopes]
+  (let [value (str/join ", " scopes)]
+    [:li {:class "org-reference-fact"}
+     [:span {:class "org-reference-fact-label"} "Scope"]
+     [:span value]]))
+
+(defn- command-fact [commands]
+  (let [label (if (= 1 (count commands)) "Command" "Commands")
+        value (str/join ", " commands)]
+    (into
+     [:li {:class "org-reference-fact org-reference-fact-command"
+           :aria-label (str label ": " value)}
+      [:span {:class "org-reference-fact-label"} label]]
+     (interpose ", " (map #(vector :code %) commands)))))
+
+(defn- key-reference-row [entry]
   (let [term (:reference/term entry)
-        description (:reference/description entry)]
-    [[:dt {:id (:reference/index-anchor entry)
-           :class "org-reference-term"
-           :data-reference-identity term
-           :data-reference-type (name (:reference/type entry))}
-      [:a {:href (:href entry)} (reference-label-node code term)]]
+        description (:reference/description entry)
+        commands (:reference/commands entry)
+        scopes (:reference/scopes entry)
+        kind (key-reference-kind entry)
+        context (str/join " › " (:reference/context-path entry))
+        attrs (cond-> {:id (:reference/index-anchor entry)
+                       :class "org-reference-term"
+                       :data-reference-identity term
+                       :data-reference-type (name (:reference/type entry))
+                       :data-reference-context context
+                       :data-reference-kind (name kind)}
+                (seq commands) (assoc :data-reference-command
+                                      (str/join " " commands))
+                (seq scopes) (assoc :data-reference-scope
+                                    (str/join " " scopes)))
+        identity-facts (cond-> [(kind-fact kind)]
+                         (seq scopes) (conj (scope-fact scopes))
+                         (seq commands) (conj (command-fact commands)))]
+    [[:dt attrs
+      [:a {:class "org-reference-key" :href (:href entry)}
+       (reference-label-node "ky" term)]
+      (into [:ul {:class "org-reference-facts org-reference-key-facts"
+                  :aria-label "Binding identity"}]
+            identity-facts)]
      [:dd {:class "org-reference-description"}
-      [:span (if (str/blank? description) "No description provided." description)]
-      " "
-      [:span {:class "org-reference-source"}
-       "From "
-       [:a {:href (:href entry)} (:reference/page-title entry)]]]]))
+      [:span {:class "org-reference-description-text"}
+       (if (str/blank? description) "No description provided." description)]
+      [:ul {:class "org-reference-facts org-reference-context-facts"
+            :aria-label "Binding context"}
+       (context-fact entry)]]]))
+
+(defn- reference-row [code entry]
+  (if (= "ky" code)
+    (key-reference-row entry)
+    (let [term (:reference/term entry)
+          description (:reference/description entry)]
+      [[:dt {:id (:reference/index-anchor entry)
+             :class "org-reference-term"
+             :data-reference-identity term
+             :data-reference-type (name (:reference/type entry))}
+        [:a {:href (:href entry)} (reference-label-node code term)]]
+       [:dd {:class "org-reference-description"}
+        [:span (if (str/blank? description) "No description provided." description)]
+        " "
+        [:span {:class "org-reference-source"}
+         "From "
+         [:a {:href (:href entry)} (:reference/page-title entry)]]]])))
 
 (defn index-section
   "Return generated semantic Hiccup for PAGE's INDEX property, or nil."
@@ -290,7 +402,9 @@
                   :data-reference-count (count entries)}
         [:p {:class "org-reference-index-summary"}
          (str (count entries) " explicitly authored "
-              (if (= 1 (count entries)) label plural) ".")]]
+              (if (= 1 (count entries)) label plural) "."
+              (when (= "ky" code)
+                " Each entry includes its section context, binding kind, and any authored command or editor scope."))]]
        (if (seq entries)
          [(into [:dl {:class "org-reference-list"}]
                 (mapcat #(reference-row code %) entries))]

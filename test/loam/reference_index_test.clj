@@ -28,6 +28,9 @@
           "Key: C-c C-c (majutsu-save)"
           (fixtures/paragraph "Save the current change."))
          (fixtures/description-item
+          "Key: B (Emacs) / I (Evil) (majutsu-before)"
+          (fixtures/paragraph "Insert before the selected revision."))
+         (fixtures/description-item
           "Key: --"
           (fixtures/paragraph "Open the path selector."))
          (fixtures/description-item
@@ -62,10 +65,27 @@
           "Face: majutsu-warning"
           (fixtures/paragraph
            "Visual metadata and prose mentioning majutsu-not-an-entry are not symbols.")))
+        repeated-key
+        (fixtures/description-list
+         (fixtures/description-item
+          "Key: --"
+          (fixtures/paragraph "Limit the log to matching files.")))
         ast (fixtures/document
              "References"
              (fixtures/page "Workflow" "workflow" "guide/workflow"
-                            (fixtures/section entries))
+                            (fixtures/section)
+                            (fixtures/headline
+                             2 "Diffing" {}
+                             (fixtures/section)
+                             (fixtures/headline
+                              3 "Diff Transient" {}
+                              (fixtures/section entries)))
+                            (fixtures/headline
+                             2 "Inspecting" {}
+                             (fixtures/section)
+                             (fixtures/headline
+                              3 "Log Options Transient" {}
+                              (fixtures/section repeated-key))))
              (index-page "Keystroke Index" "keystroke-index"
                          "reference/keystrokes" "ky")
              (index-page "Function and Command Index" "function-command-index"
@@ -94,14 +114,30 @@
                                       "pages/reference-functions-commands.html"])
         variable-html (get-in result [:artifacts :fragments "pages/reference-variables.html"])]
     (is (= :ok (:status result)) (:diagnostics result))
-    (is (= {"ky" 6 "fn" 7 "vr" 1}
+    (is (= {"ky" 8 "fn" 8 "vr" 1}
            (into {} (map (fn [[code entries]] [code (count entries)]) references))))
     (is (str/includes? source-html
                        "id=\"ref-source-key-x3a-c-c-c-c-x28-majutsu-save-x29\""))
     (is (str/includes? key-html
                        "href=\"/docs/dev/guide/workflow/#ref-source-key-x3a-c-c-c-c-x28-majutsu-save-x29\""))
     (is (str/includes? key-html "<kbd>C-c C-c</kbd>"))
-    (is (str/includes? key-html "data-reference-count=\"6\""))
+    (is (str/includes? key-html "data-reference-count=\"8\""))
+    (is (str/includes? key-html
+                       "data-reference-context=\"Workflow › Diffing › Diff Transient\""))
+    (is (str/includes? key-html
+                       "data-reference-context=\"Workflow › Inspecting › Log Options Transient\""))
+    (is (= 2 (count (re-seq #"data-reference-identity=\"--\"" key-html))))
+    (is (str/includes? key-html "data-reference-kind=\"command-binding\""))
+    (is (str/includes? key-html "data-reference-kind=\"transient-argument\""))
+    (is (str/includes? key-html "data-reference-command=\"majutsu-save\""))
+    (is (str/includes? key-html "data-reference-scope=\"Emacs Evil\""))
+    (is (str/includes? key-html
+                       "class=\"org-reference-facts org-reference-key-facts\""))
+    (is (str/includes? key-html
+                       "class=\"org-reference-facts org-reference-context-facts\""))
+    (is (str/includes? key-html "aria-label=\"Binding identity\""))
+    (is (str/includes? key-html "aria-label=\"Command: majutsu-save\""))
+    (is (str/includes? key-html ">Scope</span><span>Emacs, Evil</span>"))
     (is (str/includes? source-html "id=\"显式%anchor\""))
     (is (str/includes?
          key-html
