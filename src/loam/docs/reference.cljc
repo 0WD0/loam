@@ -4,7 +4,9 @@
   Majutsu marks its generated reference pages with an INDEX property (`ky`,
   `fn`, or `vr`).  Their entries come only from description-list terms such as
   `Key: ...`, `Command: ...`, and `User Option: ...`; ordinary prose and
-  monospace text are deliberately ignored."
+  monospace text are deliberately ignored.  A containing description list
+  may use `#+attr_reference` to author binding context which cannot be
+  represented faithfully in a compact description term."
   (:require [clojure.string :as str]
             [loam.anchor :as anchor]
             [loam.ast :as ast]
@@ -18,6 +20,54 @@
 
 (defn- normalized-text [value]
   (some-> value ast/text str/trim (str/replace #"\s+" " ") not-empty))
+
+(def reference-kinds
+  #{:command-binding :transient-argument :key-binding})
+
+(defn- attribute-values [value]
+  (cond
+    (string? value) [value]
+    (ast/node? value) [(ast/text value)]
+    (sequential? value) (mapcat attribute-values value)
+    (nil? value) []
+    :else [(str value)]))
+
+(defn- reference-attribute-pairs [node]
+  (let [props (some-> node ast/props)
+        value (or (:attr_reference props)
+                  (:ATTR_REFERENCE props))]
+    (->> (attribute-values value)
+         (mapcat #(re-seq #":([A-Za-z][A-Za-z0-9_-]*)\s+(?:\"([^\"]*)\"|'([^']*)'|([^\s]+))"
+                          %))
+         (map (fn [[_ key double-quoted single-quoted bare]]
+                [(keyword (-> key str/lower-case (str/replace "_" "-")))
+                 (or double-quoted single-quoted bare)])))))
+
+(defn- editor-scopes [value]
+  (->> (str/split (or value "") #"(?:\s*[,/]\s*|\s+)")
+       (keep (fn [scope]
+               (case (some-> scope normalized-text str/lower-case)
+                 "emacs" "Emacs"
+                 "evil" "Evil"
+                 nil)))
+       distinct
+       vec))
+
+(defn- reference-attributes [node]
+  (let [attributes (into {} (reference-attribute-pairs node))
+        kind (some-> (:kind attributes) str/lower-case keyword)
+        interface (normalized-text (:interface attributes))
+        mode (normalized-text (:mode attributes))
+        prefix (normalized-text (:prefix attributes))
+        state (normalized-text (:state attributes))
+        scopes (editor-scopes (or (:scope attributes) (:scopes attributes)))]
+    (cond-> {}
+      (contains? reference-kinds kind) (assoc :kind kind)
+      interface (assoc :interface interface)
+      mode (assoc :mode mode)
+      prefix (assoc :prefix prefix)
+      state (assoc :state state)
+      (seq scopes) (assoc :scopes scopes))))
 
 (defn description-term
   "Return the normalized authored description-list term for NODE, or nil."
@@ -172,12 +222,22 @@
   (let [page-by-id (into {} (map (juxt :page/id identity) pages))]
     (mapcat
      (fn [document]
-       (let [source (get-in document [:source :path])]
-         (keep (fn [{:keys [node path outline-path]}]
+       (let [source (get-in document [:source :path])
+             locations (vec (model/node-locations document))
+             nodes-by-path (into {} (map (juxt :path :node) locations))]
+         (keep (fn [{:keys [node path ancestors outline-path]}]
                  (when-let [specs (seq (reference-specs node))]
                    (when-let [page (get page-by-id (model/owner-id partition source path))]
                      (let [page-outline (vec (:page/outline-path page))
                            outline (vec outline-path)
+                           authored-attributes
+                           (reduce (fn [attributes ancestor-path]
+                                     (let [ancestor (get nodes-by-path ancestor-path)]
+                                       (if (= :plain-list (:type ancestor))
+                                         (merge attributes (reference-attributes ancestor))
+                                         attributes)))
+                                   {}
+                                   ancestors)
                            nested (if (and (<= (count page-outline) (count outline))
                                            (= page-outline
                                               (subvec outline 0 (count page-outline))))
@@ -190,8 +250,9 @@
                         :tag (description-term node)
                         :description (direct-description node)
                         :context-path (into [(:page/title page)] nested)
+                        :reference-attributes authored-attributes
                         :specs (vec specs)}))))
-               (model/node-locations document))))
+               locations)))
      documents)))
 
 (defn- with-source-anchors [candidates]
@@ -234,16 +295,25 @@
      :reference/specs specs}))
 
 (defn- expanded-references [item entry]
-  (mapv (fn [spec]
-          (merge
-           (select-keys entry [:node-key :source :source-span :page-id :page-route
-                               :href :anchor])
-           {:reference/tag (:tag item)
-            :reference/description (:description item)
-            :reference/page-title (get-in item [:page :page/title])
-            :reference/context-path (:context-path item)}
-           spec))
-        (:specs item)))
+  (let [{:keys [kind interface mode prefix state scopes]}
+        (:reference-attributes item)]
+    (mapv (fn [spec]
+            (merge
+             (select-keys entry [:node-key :source :source-span :page-id :page-route
+                                 :href :anchor])
+             (cond-> {:reference/tag (:tag item)
+                      :reference/description (:description item)
+                      :reference/page-title (get-in item [:page :page/title])
+                      :reference/context-path (:context-path item)}
+               kind (assoc :reference/kind kind)
+               interface (assoc :reference/interface interface)
+               mode (assoc :reference/mode mode)
+               prefix (assoc :reference/prefix prefix)
+               state (assoc :reference/state state))
+             (cond-> spec
+               (seq scopes) (update :reference/scopes
+                                    #(vec (distinct (concat (or % []) scopes)))))))
+          (:specs item))))
 
 (defn- reference-sort-key [entry]
   [(some-> entry :reference/term str/lower-case)
@@ -301,12 +371,13 @@
   (boolean
    (some #(re-find #"(?i)\btransient\b" %) context-path)))
 
-(defn- key-reference-kind [{:reference/keys [commands context-path term]}]
-  (cond
-    (seq commands) :command-binding
-    (or (transient-key-term? term)
-        (transient-context? context-path)) :transient-argument
-    :else :key-binding))
+(defn- key-reference-kind [{:reference/keys [kind commands context-path term]}]
+  (or kind
+      (cond
+        (seq commands) :command-binding
+        (or (transient-key-term? term)
+            (transient-context? context-path)) :transient-argument
+        :else :key-binding)))
 
 (def key-kind-labels
   {:command-binding "Command binding"
@@ -331,20 +402,48 @@
      [:span {:class "org-reference-fact-label"} "Scope"]
      [:span value]]))
 
+(defn- interface-fact [interface]
+  [:li {:class "org-reference-fact org-reference-fact-interface"}
+   [:span {:class "org-reference-fact-label"} "Interface"]
+   [:span interface]])
+
+(defn- mode-fact [mode]
+  [:li {:class "org-reference-fact org-reference-fact-mode"}
+   [:span {:class "org-reference-fact-label"} "Mode"]
+   [:code mode]])
+
+(defn- prefix-fact [prefix]
+  [:li {:class "org-reference-fact org-reference-fact-prefix"}
+   [:span {:class "org-reference-fact-label"} "Prefix"]
+   [:kbd prefix]])
+
+(defn- state-fact [state]
+  [:li {:class "org-reference-fact org-reference-fact-state"}
+   [:span {:class "org-reference-fact-label"} "State"]
+   [:span state]])
+
 (defn- command-fact [commands]
   (let [label (if (= 1 (count commands)) "Command" "Commands")
-        value (str/join ", " commands)]
-    (into
-     [:li {:class "org-reference-fact org-reference-fact-command"
-           :aria-label (str label ": " value)}
-      [:span {:class "org-reference-fact-label"} label]]
-     (interpose ", " (map #(vector :code %) commands)))))
+        value (str/join ", " commands)
+        rendered (interpose
+                  [:span {:class "org-reference-command-separator"
+                          :aria-hidden true} ","]
+                  (map #(vector :code %) commands))]
+    [:li {:class "org-reference-fact org-reference-fact-command"
+          :aria-label (str label ": " value)}
+     [:span {:class "org-reference-fact-label"} label]
+     (into [:span {:class "org-reference-fact-value org-reference-command-list"}]
+           rendered)]))
 
 (defn- key-reference-row [entry]
   (let [term (:reference/term entry)
         description (:reference/description entry)
         commands (:reference/commands entry)
         scopes (:reference/scopes entry)
+        interface (:reference/interface entry)
+        mode (:reference/mode entry)
+        prefix (:reference/prefix entry)
+        state (:reference/state entry)
         kind (key-reference-kind entry)
         context (str/join " › " (:reference/context-path entry))
         attrs (cond-> {:id (:reference/index-anchor entry)
@@ -356,9 +455,17 @@
                 (seq commands) (assoc :data-reference-command
                                       (str/join " " commands))
                 (seq scopes) (assoc :data-reference-scope
-                                    (str/join " " scopes)))
+                                    (str/join " " scopes))
+                interface (assoc :data-reference-interface interface)
+                mode (assoc :data-reference-mode mode)
+                prefix (assoc :data-reference-prefix prefix)
+                state (assoc :data-reference-state state))
         identity-facts (cond-> [(kind-fact kind)]
+                         interface (conj (interface-fact interface))
+                         mode (conj (mode-fact mode))
                          (seq scopes) (conj (scope-fact scopes))
+                         prefix (conj (prefix-fact prefix))
+                         state (conj (state-fact state))
                          (seq commands) (conj (command-fact commands)))]
     [[:dt attrs
       [:a {:class "org-reference-key" :href (:href entry)}
@@ -404,7 +511,7 @@
          (str (count entries) " explicitly authored "
               (if (= 1 (count entries)) label plural) "."
               (when (= "ky" code)
-                " Each entry includes its section context, binding kind, and any authored command or editor scope."))]]
+                " Each entry includes its section context, binding kind, and any authored interface, mode, prefix, state, command, or editor scope."))]]
        (if (seq entries)
          [(into [:dl {:class "org-reference-list"}]
                 (mapcat #(reference-row code %) entries))]

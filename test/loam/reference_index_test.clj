@@ -70,6 +70,16 @@
          (fixtures/description-item
           "Key: --"
           (fixtures/paragraph "Limit the log to matching files.")))
+        contextual-key
+        (assoc-in
+         (fixtures/description-list
+         (fixtures/description-item
+           "Key: n / p"
+           (fixtures/paragraph "Move between unresolved conflicts.")))
+         [:properties :attr_reference]
+         {:type :anonymous
+          :properties {}
+          :contents [":kind command-binding :interface \"Conflict buffer\" :mode majutsu-conflict-mode :prefix \"C-c ^\" :scope Emacs :state Normal"]})
         ast (fixtures/document
              "References"
              (fixtures/page "Workflow" "workflow" "guide/workflow"
@@ -85,7 +95,10 @@
                              (fixtures/section)
                              (fixtures/headline
                               3 "Log Options Transient" {}
-                              (fixtures/section repeated-key))))
+                              (fixtures/section repeated-key)))
+                            (fixtures/headline
+                             2 "Resolving" {}
+                             (fixtures/section contextual-key)))
              (index-page "Keystroke Index" "keystroke-index"
                          "reference/keystrokes" "ky")
              (index-page "Function and Command Index" "function-command-index"
@@ -114,14 +127,14 @@
                                       "pages/reference-functions-commands.html"])
         variable-html (get-in result [:artifacts :fragments "pages/reference-variables.html"])]
     (is (= :ok (:status result)) (:diagnostics result))
-    (is (= {"ky" 8 "fn" 8 "vr" 1}
+    (is (= {"ky" 9 "fn" 8 "vr" 1}
            (into {} (map (fn [[code entries]] [code (count entries)]) references))))
     (is (str/includes? source-html
                        "id=\"ref-source-key-x3a-c-c-c-c-x28-majutsu-save-x29\""))
     (is (str/includes? key-html
                        "href=\"/docs/dev/guide/workflow/#ref-source-key-x3a-c-c-c-c-x28-majutsu-save-x29\""))
     (is (str/includes? key-html "<kbd>C-c C-c</kbd>"))
-    (is (str/includes? key-html "data-reference-count=\"8\""))
+    (is (str/includes? key-html "data-reference-count=\"9\""))
     (is (str/includes? key-html
                        "data-reference-context=\"Workflow › Diffing › Diff Transient\""))
     (is (str/includes? key-html
@@ -131,13 +144,22 @@
     (is (str/includes? key-html "data-reference-kind=\"transient-argument\""))
     (is (str/includes? key-html "data-reference-command=\"majutsu-save\""))
     (is (str/includes? key-html "data-reference-scope=\"Emacs Evil\""))
+    (is (str/includes? key-html "data-reference-interface=\"Conflict buffer\""))
+    (is (str/includes? key-html "data-reference-mode=\"majutsu-conflict-mode\""))
+    (is (str/includes? key-html "data-reference-prefix=\"C-c ^\""))
+    (is (str/includes? key-html "data-reference-state=\"Normal\""))
     (is (str/includes? key-html
                        "class=\"org-reference-facts org-reference-key-facts\""))
     (is (str/includes? key-html
                        "class=\"org-reference-facts org-reference-context-facts\""))
     (is (str/includes? key-html "aria-label=\"Binding identity\""))
     (is (str/includes? key-html "aria-label=\"Command: majutsu-save\""))
+    (is (str/includes? key-html "class=\"org-reference-fact-value org-reference-command-list\""))
     (is (str/includes? key-html ">Scope</span><span>Emacs, Evil</span>"))
+    (is (str/includes? key-html ">Interface</span><span>Conflict buffer</span>"))
+    (is (str/includes? key-html ">Mode</span><code>majutsu-conflict-mode</code>"))
+    (is (str/includes? key-html ">Prefix</span><kbd>C-c ^</kbd>"))
+    (is (str/includes? key-html ">State</span><span>Normal</span>"))
     (is (str/includes? source-html "id=\"显式%anchor\""))
     (is (str/includes?
          key-html
