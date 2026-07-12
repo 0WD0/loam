@@ -32,26 +32,42 @@
     (nil? value) []
     :else [(str value)]))
 
+(defn- parsed-attribute-pairs [value]
+  (->> (attribute-values value)
+       (mapcat #(re-seq #":([A-Za-z][A-Za-z0-9_-]*)\s+(?:\"([^\"]*)\"|'([^']*)'|([^\s]+))"
+                        %))
+       (map (fn [[_ key double-quoted single-quoted bare]]
+              [(keyword (-> key str/lower-case (str/replace "_" "-")))
+               (or double-quoted single-quoted bare)]))))
+
 (defn- reference-attribute-pairs [node]
-  (let [props (some-> node ast/props)
-        value (or (:attr_reference props)
-                  (:ATTR_REFERENCE props))]
-    (->> (attribute-values value)
-         (mapcat #(re-seq #":([A-Za-z][A-Za-z0-9_-]*)\s+(?:\"([^\"]*)\"|'([^']*)'|([^\s]+))"
-                          %))
-         (map (fn [[_ key double-quoted single-quoted bare]]
-                [(keyword (-> key str/lower-case (str/replace "_" "-")))
-                 (or double-quoted single-quoted bare)])))))
+  (let [props (some-> node ast/props)]
+    (parsed-attribute-pairs (or (:attr_reference props)
+                                (:ATTR_REFERENCE props)))))
+
+(defn- editor-scope [value]
+  (case (some-> value normalized-text str/lower-case)
+    ;; `Emacs' was the original authored label.  Keep accepting it while
+    ;; presenting the more precise `Vanilla' name for Majutsu's native map.
+    "emacs" "Vanilla"
+    "vanilla" "Vanilla"
+    "evil" "Evil"
+    nil))
 
 (defn- editor-scopes [value]
   (->> (str/split (or value "") #"(?:\s*[,/]\s*|\s+)")
-       (keep (fn [scope]
-               (case (some-> scope normalized-text str/lower-case)
-                 "emacs" "Emacs"
-                 "evil" "Evil"
-                 nil)))
+       (keep editor-scope)
        distinct
        vec))
+
+(defn keymap-scopes
+  "Return normalized Vanilla/Evil scopes from NODE's `attr_keymap'."
+  [node]
+  (let [props (some-> node ast/props)
+        attributes (into {}
+                         (parsed-attribute-pairs
+                          (or (:attr_keymap props) (:ATTR_KEYMAP props))))]
+    (editor-scopes (or (:scope attributes) (:scopes attributes)))))
 
 (defn- reference-attributes [node]
   (let [attributes (into {} (reference-attribute-pairs node))
@@ -126,6 +142,13 @@
        (filter #(some command-symbol? (split-symbols %)))
        vec))
 
+(defn- key-scope-groups [term]
+  (->> (key-parenthetical-groups term)
+       (filter (fn [group]
+                 (let [parts (str/split group #"\s*/\s*")]
+                   (and (seq parts) (every? editor-scope parts)))))
+       vec))
+
 (defn- key-commands [term]
   (->> (key-command-groups term)
        (mapcat split-symbols)
@@ -133,24 +156,20 @@
        vec))
 
 (defn- key-scopes [term]
-  (->> (key-parenthetical-groups term)
-       (remove #(some command-symbol? (split-symbols %)))
+  (->> (key-scope-groups term)
        (mapcat #(str/split % #"\s*/\s*"))
-       (keep (fn [scope]
-               (case (some-> scope normalized-text str/lower-case)
-                 "emacs" "Emacs"
-                 "evil" "Evil"
-                 nil)))
+       (keep editor-scope)
        distinct
        vec))
 
 (defn- key-label [term]
-  (let [without-commands
+  (let [without-qualifiers
         (reduce (fn [value group]
                   (str/replace value (str "(" group ")") ""))
                 term
-                (key-command-groups term))]
-    (or (some-> without-commands
+                (concat (key-command-groups term)
+                        (key-scope-groups term)))]
+    (or (some-> without-qualifiers
                 normalized-text
                 (str/replace #"\s*/\s*$" "")
                 str/trim
@@ -273,26 +292,32 @@
     candidates)))
 
 (defn- source-entry [{:keys [document node path page tag source-anchor
-                             source-anchor-explicit? specs]}]
+                             source-anchor-explicit? specs reference-attributes]}]
   (let [p (ast/props node)
-        source (get-in document [:source :path])]
-    {:node-key (model/node-key source path)
-     :node-type :item
-     :source source
-     :source-span (diagnostic/source-span document node)
-     :page-id (:page/id page)
-     :page-route (:page/route page)
-     :id (:ID p)
-     :custom-id (:CUSTOM_ID p)
-     :title tag
-     :anchor source-anchor
-     :anchor-kind (if source-anchor-explicit?
-                    (anchor/docs-anchor-kind node)
-                    :generated-reference)
-     :explicit-anchor? source-anchor-explicit?
-     :href (anchor/with-fragment (:page/route page) source-anchor)
-     :reference/source? true
-     :reference/specs specs}))
+        source (get-in document [:source :path])
+        scopes (->> (concat (mapcat :reference/scopes specs)
+                            (:scopes reference-attributes))
+                    (remove nil?)
+                    distinct
+                    vec)]
+    (cond-> {:node-key (model/node-key source path)
+             :node-type :item
+             :source source
+             :source-span (diagnostic/source-span document node)
+             :page-id (:page/id page)
+             :page-route (:page/route page)
+             :id (:ID p)
+             :custom-id (:CUSTOM_ID p)
+             :title tag
+             :anchor source-anchor
+             :anchor-kind (if source-anchor-explicit?
+                            (anchor/docs-anchor-kind node)
+                            :generated-reference)
+             :explicit-anchor? source-anchor-explicit?
+             :href (anchor/with-fragment (:page/route page) source-anchor)
+             :reference/source? true
+             :reference/specs specs}
+      (seq scopes) (assoc :reference/scopes scopes))))
 
 (defn- expanded-references [item entry]
   (let [{:keys [kind interface mode prefix state scopes]}
@@ -446,6 +471,7 @@
         state (:reference/state entry)
         kind (key-reference-kind entry)
         context (str/join " › " (:reference/context-path entry))
+        scope-value (when (seq scopes) (str/join " " scopes))
         attrs (cond-> {:id (:reference/index-anchor entry)
                        :class "org-reference-term"
                        :data-reference-identity term
@@ -454,8 +480,8 @@
                        :data-reference-kind (name kind)}
                 (seq commands) (assoc :data-reference-command
                                       (str/join " " commands))
-                (seq scopes) (assoc :data-reference-scope
-                                    (str/join " " scopes))
+                scope-value (assoc :data-reference-scope scope-value
+                                   :data-keymap-scope scope-value)
                 interface (assoc :data-reference-interface interface)
                 mode (assoc :data-reference-mode mode)
                 prefix (assoc :data-reference-prefix prefix)
@@ -473,7 +499,8 @@
       (into [:ul {:class "org-reference-facts org-reference-key-facts"
                   :aria-label "Binding identity"}]
             identity-facts)]
-     [:dd {:class "org-reference-description"}
+     [:dd (cond-> {:class "org-reference-description"}
+            scope-value (assoc :data-keymap-scope scope-value))
       [:span {:class "org-reference-description-text"}
        (if (str/blank? description) "No description provided." description)]
       [:ul {:class "org-reference-facts org-reference-context-facts"

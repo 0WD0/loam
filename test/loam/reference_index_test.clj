@@ -79,7 +79,7 @@
          [:properties :attr_reference]
          {:type :anonymous
           :properties {}
-          :contents [":kind command-binding :interface \"Conflict buffer\" :mode majutsu-conflict-mode :prefix \"C-c ^\" :scope Emacs :state Normal"]})
+          :contents [":kind command-binding :interface \"Conflict buffer\" :mode majutsu-conflict-mode :prefix \"C-c ^\" :scope Vanilla :state Normal"]})
         ast (fixtures/document
              "References"
              (fixtures/page "Workflow" "workflow" "guide/workflow"
@@ -143,7 +143,12 @@
     (is (str/includes? key-html "data-reference-kind=\"command-binding\""))
     (is (str/includes? key-html "data-reference-kind=\"transient-argument\""))
     (is (str/includes? key-html "data-reference-command=\"majutsu-save\""))
-    (is (str/includes? key-html "data-reference-scope=\"Emacs Evil\""))
+    (is (str/includes? key-html "data-reference-scope=\"Vanilla Evil\""))
+    (is (str/includes? key-html "data-keymap-scope=\"Vanilla Evil\""))
+    (is (= 2 (count (re-seq #"data-keymap-scope=\"Vanilla Evil\"" source-html))))
+    (is (str/includes? key-html "data-reference-identity=\"B / I\""))
+    (is (str/includes? key-html "<kbd>B / I</kbd>"))
+    (is (not (str/includes? key-html "<kbd>B (Emacs) / I (Evil)</kbd>")))
     (is (str/includes? key-html "data-reference-interface=\"Conflict buffer\""))
     (is (str/includes? key-html "data-reference-mode=\"majutsu-conflict-mode\""))
     (is (str/includes? key-html "data-reference-prefix=\"C-c ^\""))
@@ -155,7 +160,7 @@
     (is (str/includes? key-html "aria-label=\"Binding identity\""))
     (is (str/includes? key-html "aria-label=\"Command: majutsu-save\""))
     (is (str/includes? key-html "class=\"org-reference-fact-value org-reference-command-list\""))
-    (is (str/includes? key-html ">Scope</span><span>Emacs, Evil</span>"))
+    (is (str/includes? key-html ">Scope</span><span>Vanilla, Evil</span>"))
     (is (str/includes? key-html ">Interface</span><span>Conflict buffer</span>"))
     (is (str/includes? key-html ">Mode</span><code>majutsu-conflict-mode</code>"))
     (is (str/includes? key-html ">Prefix</span><kbd>C-c ^</kbd>"))

@@ -127,6 +127,26 @@
                        "Use the <code class=\"org-verbatim\">jj</code> CLI."))
     (is (not (str/includes? fragment "</code>CLI")))))
 
+(deftest renders-texinfo-compatible-keymap-scopes-as-html-data
+  (let [vanilla (assoc (fixtures/paragraph "Use n and p.")
+                       :properties {:attr_keymap ":scope Vanilla"})
+        evil-list (assoc (fixtures/description-list
+                          (fixtures/description-item "Key: C-j" (fixtures/paragraph "Move.")))
+                         :properties {:type :descriptive
+                                      :attr_keymap ":scope Evil"})
+        ast (fixtures/document "Keymaps"
+                               (fixtures/page "Keymaps" "keymaps" "guide/keymaps"
+                                              (fixtures/section vanilla evil-list)))
+        result (compile/compile-documents
+                [(fixtures/envelope-input "docs/keymaps.org" ast)]
+                fixtures/compile-opts)
+        fragment (get-in result [:artifacts :fragments "pages/guide-keymaps.html"])]
+    (is (= :ok (:status result)) (:diagnostics result))
+    (is (str/includes? fragment
+                       "<p class=\"org-paragraph\" data-keymap-scope=\"Vanilla\">"))
+    (is (str/includes? fragment
+                       "<dl data-keymap-scope=\"Evil\">"))))
+
 (deftest compiler-service-targets-compose-through-the-pipeline
   (let [extension
         {:id :test/compiler-phases

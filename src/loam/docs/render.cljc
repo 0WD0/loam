@@ -174,6 +174,14 @@
     "descriptive" :dl
     :ul))
 
+(defn- keymap-attrs [node]
+  (when-let [scopes (seq (reference/keymap-scopes node))]
+    {:data-keymap-scope (str/join " " scopes)}))
+
+(defn- reference-keymap-attrs [entry]
+  (when-let [scopes (seq (:reference/scopes entry))]
+    {:data-keymap-scope (str/join " " scopes)}))
+
 (defn- item-renderer [ctx node path]
   (let [p (ast/props node)
         entry (get-in (:index ctx) [:entries (model/node-key (:source ctx) path)])
@@ -183,15 +191,17 @@
                    "trans" [:input {:type "checkbox" :data-indeterminate true :disabled true}]
                    nil)
         children (cond-> [] checkbox (conj checkbox))
-        contents (render-children ctx node path)]
+        contents (render-children ctx node path)
+        scoped-attrs (reference-keymap-attrs entry)]
     (if-let [tag (:tag p)]
       [(if (:reference/source? entry)
-         [:dt {:id (:anchor entry)
-               :class "org-reference-source-term"
-               :data-reference-source true}
+         [:dt (merge {:id (:anchor entry)
+                      :class "org-reference-source-term"
+                      :data-reference-source true}
+                     scoped-attrs)
           (ast/text tag)]
-         [:dt (ast/text tag)])
-       (into [:dd] (concat children contents))]
+         [:dt (or scoped-attrs {}) (ast/text tag)])
+       (into [:dd (or scoped-attrs {})] (concat children contents))]
       [(into [:li] (concat children contents))])))
 
 (defn- special-block-renderer [ctx node path]
@@ -201,9 +211,10 @@
                      ast/value-name
                      str/lower-case)]
     (if (contains? allowed-special-blocks kind)
-      [(hiccup :aside {:class (str "org-callout org-callout-" kind)
-                       :data-org-block kind
-                       :role (when (contains? #{"warning" "danger"} kind) "note")}
+      [(hiccup :aside (merge {:class (str "org-callout org-callout-" kind)
+                              :data-org-block kind
+                              :role (when (contains? #{"warning" "danger"} kind) "note")}
+                             (keymap-attrs node))
                (render-children ctx node path))]
       (do
         (report! ctx
@@ -235,7 +246,8 @@
   {:org-data (fn [ctx node path] (render-children ctx node path))
    :section (fn [ctx node path] (render-children ctx node path))
    :anonymous (fn [ctx node path] (render-children ctx node path))
-   :paragraph (fn [ctx node path] [(hiccup :p {:class "org-paragraph"}
+   :paragraph (fn [ctx node path] [(hiccup :p (merge {:class "org-paragraph"}
+                                                     (keymap-attrs node))
                                               (render-children ctx node path))])
    :headline headline-renderer
    :bold (fn [ctx node path] [(hiccup :strong (render-children ctx node path))])
@@ -257,7 +269,8 @@
                        (or (:value (ast/props node)) "")]]))
    :entity (fn [_ node _] [(or (:utf-8 (ast/props node)) (:name (ast/props node)) "")])
    :line-break (fn [_ _ _] [[:br]])
-   :plain-list (fn [ctx node path] [(hiccup (list-tag node) (render-children ctx node path))])
+   :plain-list (fn [ctx node path] [(hiccup (list-tag node) (or (keymap-attrs node) {})
+                                           (render-children ctx node path))])
    :item item-renderer
    :src-block (fn [_ node _]
                 (let [language (:language (ast/props node))]
