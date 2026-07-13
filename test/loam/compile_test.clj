@@ -14,7 +14,7 @@
   (let [envelope (edn/read-string (slurp "test/fixtures/consumer-envelope-v1.edn"))
         expected-fragment (edn/read-string (slurp "test/fixtures/golden/minimal-fragment.edn"))
         result (compile/compile-documents [(canonical-input)]
-                                          {:build {:vcs fixtures/build-vcs}})
+                                          {:build {:commitId fixtures/build-commit-id}})
         manifest (get-in result [:artifacts :manifest])
         manifest-json (get-in result [:artifacts :files "manifest.json"])]
     (is (= [:ox-edn/schema-version :ox-edn/exporter :ox-edn/source
@@ -27,8 +27,8 @@
              :sha256 "d9c591eec2cda2c5af741896200ff93c76ac43b2f306e2b3a51c783b73e7b613"}]
            (:sources manifest)))
     (is (not (contains? manifest :source)))
-    (is (= {:system "jj" :changeId "test-change" :commitId "test-commit"}
-           (get-in manifest [:build :vcs])))
+    (is (= "test-commit" (get-in manifest [:build :commitId])))
+    (is (not (contains? (:build manifest) :vcs)))
     (is (= "/docs/dev/hello/" (get-in manifest [:pages 0 :route])))
     (is (= 3 (get-in manifest [:pages 0 :source :startLine])))
     (is (= expected-fragment
@@ -38,7 +38,7 @@
     (is (not (str/includes? (pr-str (:artifacts result)) "/home/")))))
 
 (deftest compiler-output-is-byte-deterministic
-  (let [opts {:build {:vcs fixtures/build-vcs}}
+  (let [opts {:build {:commitId fixtures/build-commit-id}}
         first-result (compile/compile-documents [(canonical-input)] opts)
         second-result (compile/compile-documents [(canonical-input)] opts)]
     (is (= :ok (:status first-result)))
@@ -47,7 +47,7 @@
     (is (= (get-in first-result [:artifacts :manifest :build :contentHash])
            (get-in second-result [:artifacts :manifest :build :contentHash])))))
 
-(deftest validates-envelope-schema-hash-diagnostics-and-build-metadata
+(deftest validates-envelope-schema-hash-diagnostics-and-optional-build-metadata
   (let [base (canonical-input)
         cases
         [[:unsupported-envelope-version
@@ -64,13 +64,23 @@
                     [{:severity :warning :code "not-a-keyword" :message "bad"}])]]]
     (doseq [[code input] cases]
       (testing (name code)
-        (let [result (compile/compile-documents [input] {:build {:vcs fixtures/build-vcs}})]
+        (let [result (compile/compile-documents
+                      [input] {:build {:commitId fixtures/build-commit-id}})]
           (is (= :error (:status result)))
           (is (some #(= code (:code %)) (:diagnostics result)))
           (is (nil? (:artifacts result))))))
-    (let [missing-vcs (compile/compile-documents [(canonical-input)] {})]
-      (is (= :error (:status missing-vcs)))
-      (is (some #(= :missing-build-vcs (:code %)) (:diagnostics missing-vcs))))))
+    (let [local-build (compile/compile-documents [(canonical-input)] {})]
+      (is (= :ok (:status local-build)) (:diagnostics local-build))
+      (is (not (contains? (get-in local-build [:artifacts :manifest :build])
+                          :commitId))))
+    (doseq [commit-id [nil "" 42]]
+      (let [invalid-commit (compile/compile-documents
+                            [(canonical-input)]
+                            {:build {:commitId commit-id}})]
+        (is (= :error (:status invalid-commit)))
+        (is (some #(and (= :invalid-build-commit (:code %))
+                        (= :commitId (get-in % [:data :field])))
+                  (:diagnostics invalid-commit)))))))
 
 (deftest strict-renderer-never-falls-back-to-children
   (doseq [[node code]

@@ -2,14 +2,11 @@
   (:require [clojure.edn :as edn]
             [loam.compile :as compile]))
 
-(def build-vcs
-  {:system "jj"
-   :changeId "test-change"
-   :commitId "test-commit"})
+(def build-commit-id "test-commit")
 
 (def compile-opts
   {:require-source-spans? false
-   :build {:vcs build-vcs}})
+   :build {:commitId build-commit-id}})
 
 (defn paragraph [& contents]
   {:type :paragraph :properties {} :contents (vec contents)})

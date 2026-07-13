@@ -64,14 +64,37 @@
         opts {:repo-root "."
               :output-dir (.getPath output)
               :envelope-files ["test/fixtures/consumer-envelope-v1.edn"]
-              :vcs-change-id "test-change"
-              :vcs-commit-id "test-commit"}
+              :commit-id "test-commit"}
         first-summary (starlight/compile-cli! opts)
         first-manifest (slurp (io/file output "manifest.json"))]
     (is (= 1 (:pages first-summary)))
+    (is (= "test-commit"
+           (get-in first-summary [:result :artifacts :manifest :build :commitId])))
+    (is (nil? (get-in first-summary [:result :artifacts :manifest :build :vcs])))
+    (is (not (.contains first-manifest "changeId")))
     (is (.isFile (io/file output "pages/hello.html")))
     (spit (io/file output "stale.html") "stale")
     (let [second-summary (starlight/compile-cli! opts)]
       (is (= (:content-hash first-summary) (:content-hash second-summary)))
       (is (= first-manifest (slurp (io/file output "manifest.json"))))
       (is (not (.exists (io/file output "stale.html")))))))
+
+(deftest cli-accepts-an-optional-commit-id
+  (let [base-opts {:repo-root "."
+                   :output-dir (.getPath (io/file (temp-dir) "docs-cache"))
+                   :envelope-files ["test/fixtures/consumer-envelope-v1.edn"]}
+        local-summary (starlight/compile-cli! base-opts)]
+    (is (= 1 (:pages local-summary)))
+    (is (not (contains? (get-in local-summary [:result :artifacts :manifest :build])
+                        :commitId)))
+    (is (= "source-commit"
+           (:commit-id
+            (starlight/parse-cli-args
+             ["--repo-root" "."
+              "--output-dir" "out"
+              "--commit-id" "source-commit"
+              "envelope.edn"]))))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                          #"Unknown Loam docs compiler option"
+                          (starlight/parse-cli-args
+                           ["--vcs-commit-id" "legacy" "envelope.edn"])))))

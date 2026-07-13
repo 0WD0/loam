@@ -1,19 +1,13 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const repoRoot = process.cwd();
 const scratch = await mkdtemp(path.join(tmpdir(), 'loam-docs-cli-exit-'));
-const binDir = path.join(scratch, 'bin');
 const outputDir = path.join(scratch, 'output');
-const fakeJj = path.join(binDir, 'jj');
 
 try {
-  await mkdir(binDir);
-  await writeFile(fakeJj, '#!/bin/sh\nprintf "test-change\\ntest-commit\\n"\n');
-  await chmod(fakeJj, 0o755);
-
   const startedAt = performance.now();
   const result = spawnSync(
     'clojure',
@@ -25,13 +19,14 @@ try {
       repoRoot,
       '--output-dir',
       outputDir,
+      '--commit-id',
+      'test-commit',
       'test/fixtures/consumer-envelope-v1.edn',
     ],
     {
       cwd: repoRoot,
       encoding: 'utf8',
       timeout: 8_000,
-      env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH}` },
     },
   );
   const elapsedMs = Math.round(performance.now() - startedAt);
@@ -49,7 +44,7 @@ try {
   }
 
   const manifest = JSON.parse(await readFile(path.join(outputDir, 'manifest.json'), 'utf8'));
-  if (manifest.build.vcs.changeId !== 'test-change' || manifest.pages.length !== 1) {
+  if (manifest.build.commitId !== 'test-commit' || manifest.pages.length !== 1) {
     throw new Error('docs CLI prompt-exit smoke test produced an unexpected manifest');
   }
 

@@ -324,27 +324,21 @@
       (:page/next page) (assoc :nextId (:page/next page))
       (:page/landing? page) (assoc :landing true))))
 
-(defn- vcs-map [opts]
-  (let [vcs (get-in opts [:build :vcs])]
-    {:system (or (:system vcs) (get vcs "system"))
-     :changeId (or (:changeId vcs) (:change-id vcs) (get vcs "changeId"))
-     :commitId (or (:commitId vcs) (:commit-id vcs) (get vcs "commitId"))}))
+(defn- build-commit-id [opts]
+  (get-in opts [:build :commitId]))
 
-(defn- vcs-diagnostics [opts]
-  (let [vcs (vcs-map opts)
-        missing (filter #(str/blank? (str (get vcs %))) [:system :changeId :commitId])]
-    (cond->
-     (mapv (fn [field]
-             (diagnostic/error :missing-build-vcs
-                               "Manifest v1 requires complete build.vcs metadata"
-                               {:phase :emit :node-type :org-data :source-span {}
-                                :data {:field field}}))
-           missing)
-      (and (empty? missing) (not= "jj" (:system vcs)))
-      (conj (diagnostic/error :invalid-build-vcs
-                              "Manifest v1 build.vcs.system must be jj"
-                              {:phase :emit :node-type :org-data :source-span {}
-                               :data {:system (:system vcs)}})))))
+(defn- build-commit-diagnostics [opts]
+  (let [build (:build opts)
+        commit-id (build-commit-id opts)]
+    (if (or (nil? build)
+            (and (map? build)
+                 (or (not (contains? build :commitId))
+                     (and (string? commit-id) (not (str/blank? commit-id))))))
+      []
+      [(diagnostic/error :invalid-build-commit
+                         "Manifest build.commitId must be a non-empty string when provided"
+                         {:phase :emit :node-type :org-data :source-span {}
+                          :data {:field :commitId}})])))
 
 (defn- machine-path? [value]
   (and (string? value)
@@ -375,9 +369,10 @@
                                    :data {:content-file file
                                           :page-ids (mapv first entries)}}))
               (filter (fn [[_ entries]] (> (count entries) 1)) file-groups))
-        vcs-diagnostics (vcs-diagnostics opts)
+        commit-diagnostics (build-commit-diagnostics opts)
         diagnostics (diagnostic/sort-diagnostics
-                     (concat diagnostics collision-diagnostics vcs-diagnostics))]
+                     (concat diagnostics collision-diagnostics
+                             commit-diagnostics))]
     (if (some diagnostic/error? diagnostics)
       {:diagnostics diagnostics}
       (let [fragment-data
@@ -407,11 +402,12 @@
             content-hash (sha256 (str (pr-str source-models)
                                       "\n"
                                       (str/join "\n" (map (juxt :content-file :digest) fragment-data))))
+            commit-id (build-commit-id opts)
             manifest {:schemaVersion manifest-schema-version
                       :sources source-models
-                      :build {:vcs (vcs-map opts)
-                              :contentHash content-hash
-                              :unreleasable unreleasable?}
+                      :build (cond-> {:contentHash content-hash
+                                      :unreleasable unreleasable?}
+                               commit-id (assoc :commitId commit-id))
                       :pages page-models
                       :navigation (model/navigation-tree pages)
                       :redirects (vec (or (:redirects opts) []))

@@ -2,7 +2,6 @@
   "Filesystem boundary for Loam Manifest v1 and HTML fragments."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [clojure.java.shell :as shell]
             [clojure.string :as str]
             [loam.compile :as compile]
             [loam.route :as route])
@@ -157,12 +156,10 @@
        "  --output-dir DIR       Atomic Manifest v1/HTML fragment output directory\n"
        "  ENVELOPE.edn...        One or more ox-edn Envelope v1 files\n\n"
        "Optional:\n"
+       "  --commit-id ID         Source commit represented by a release build\n"
        "  --base PATH            Route base, default /docs\n"
        "  --version VERSION      Documentation version, default dev\n"
-       "  --locale LOCALE        Optional locale route component\n"
-       "  --vcs-change-id ID     Override the jj change ID (requires --vcs-commit-id)\n"
-       "  --vcs-commit-id ID     Override the jj commit ID (requires --vcs-change-id)\n\n"
-       "Without VCS overrides, Loam reads @ from the repo-root jj workspace."))
+       "  --locale LOCALE        Optional locale route component\n"))
 
 (def cli-option-keys
   {"--repo-root" :repo-root
@@ -170,8 +167,7 @@
    "--base" :base
    "--version" :version
    "--locale" :locale
-   "--vcs-change-id" :vcs-change-id
-   "--vcs-commit-id" :vcs-commit-id})
+   "--commit-id" :commit-id})
 
 (defn parse-cli-args
   "Parse docs compiler flags and positional Envelope v1 files."
@@ -194,52 +190,23 @@
           (recur (next args) (update opts :envelope-files conj argument)))))))
 
 (defn- validate-cli-opts! [opts]
-  (let [missing (vec (remove #(not (str/blank? (str (get opts %))))
-                             [:repo-root :output-dir]))
-        provided-vcs (filter #(not (str/blank? (str (get opts %))))
-                             [:vcs-change-id :vcs-commit-id])]
+  (let [missing (vec (remove #(let [value (get opts %)]
+                                (and (string? value) (not (str/blank? value))))
+                             [:repo-root :output-dir]))]
     (when (seq missing)
       (throw (ex-info "Missing required Loam docs compiler option"
                       {:missing missing :usage usage})))
     (when (empty? (:envelope-files opts))
       (throw (ex-info "At least one Envelope v1 file is required"
                       {:missing [:envelope-files] :usage usage})))
-    (when (= 1 (count provided-vcs))
-      (throw (ex-info "VCS change and commit overrides must be supplied together"
-                      {:missing (vec (remove (set provided-vcs)
-                                             [:vcs-change-id :vcs-commit-id]))
-                       :usage usage})))
     opts))
-
-(defn- jj-vcs [repo-root]
-  (let [{:keys [exit out err]}
-        (shell/sh "jj" "-R" (str repo-root)
-                  "log" "-r" "@" "--no-graph"
-                  "-T" "change_id ++ \"\\n\" ++ commit_id ++ \"\\n\"")
-        [change-id commit-id & extra]
-        (remove str/blank? (str/split-lines out))]
-    (when (or (not (zero? exit)) (str/blank? change-id)
-              (str/blank? commit-id) (seq extra))
-      (throw (ex-info "Could not read jj build identity from repo root"
-                      {:code :missing-build-vcs
-                       :repo-root (str repo-root)
-                       :exit exit
-                       :stderr (str/trim err)})))
-    {:system "jj" :changeId change-id :commitId commit-id}))
-
-(defn- cli-vcs [opts]
-  (if (:vcs-change-id opts)
-    {:system "jj"
-     :changeId (:vcs-change-id opts)
-     :commitId (:vcs-commit-id opts)}
-    (jj-vcs (:repo-root opts))))
 
 (defn compile-cli!
   "Compile CLI-style OPTS into one atomic Manifest v1 generation."
   [opts]
   (let [opts (validate-cli-opts! opts)
-        compile-opts (cond-> {:output-dir (:output-dir opts)
-                              :build {:vcs (cli-vcs opts)}}
+        compile-opts (cond-> {:output-dir (:output-dir opts)}
+                       (:commit-id opts) (assoc :build {:commitId (:commit-id opts)})
                        (:base opts) (assoc :base (:base opts))
                        (:version opts) (assoc :version (:version opts))
                        (:locale opts) (assoc :locale (:locale opts)))]
@@ -264,19 +231,13 @@
         (println text)))))
 
 (defn -main [& args]
-  (try
-    (if (some #{"--help" "-h"} args)
-      (println usage)
-      (try
-        (let [summary (compile-cli! (parse-cli-args args))]
-          (println "Compiled docs"
-                   (select-keys summary [:output-dir :files :pages :content-hash
-                                         :unreleasable?])))
-        (catch clojure.lang.ExceptionInfo error
-          (print-cli-error! error)
-          (System/exit 1))))
-    (finally
-      ;; `jj-vcs` uses clojure.java.shell/sh, whose stream readers run on the
-      ;; non-daemon agent pool. A command-line entry point owns that pool's
-      ;; lifecycle and must stop it after the final result is printed.
-      (shutdown-agents))))
+  (if (some #{"--help" "-h"} args)
+    (println usage)
+    (try
+      (let [summary (compile-cli! (parse-cli-args args))]
+        (println "Compiled docs"
+                 (select-keys summary [:output-dir :files :pages :content-hash
+                                       :unreleasable?])))
+      (catch clojure.lang.ExceptionInfo error
+        (print-cli-error! error)
+        (System/exit 1)))))
