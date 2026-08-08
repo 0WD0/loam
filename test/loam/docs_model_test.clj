@@ -131,13 +131,18 @@
     (is (= "manual:parent" (:id parent-manifest)))
     (is (= ["manual:nested-page"] (:childIds parent-manifest)))
     (is (= "manual:parent" (:parentId nested-manifest)))
-    (is (= [{:depth 2 :slug "nested-detail" :text "Nested detail"}
+    (is (= [{:depth 2 :slug "nested-detail" :text "Nested detail"
+             :outlinePath ["Nested detail"]}
             {:depth 2 :slug "majutsu-log-commit-columns"
-             :text "majutsu-log-commit-columns"}
+             :text "majutsu-log-commit-columns"
+             :outlinePath ["majutsu-log-commit-columns"]}
             {:depth 2 :slug "understanding-revisions"
-             :text "Understanding --revisions"}
-            {:depth 2 :slug "face-policy-face" :text "Face Policy (:face)"}
-            {:depth 2 :slug "postprocessing-post" :text "Postprocessing (:post)"}]
+             :text "Understanding --revisions"
+             :outlinePath ["Understanding --revisions"]}
+            {:depth 2 :slug "face-policy-face" :text "Face Policy (:face)"
+             :outlinePath ["Face Policy (:face)"]}
+            {:depth 2 :slug "postprocessing-post" :text "Postprocessing (:post)"
+             :outlinePath ["Postprocessing (:post)"]}]
            (:headings nested-manifest)))
     (is (= {:id "manual:parent"
             :title "Parent"

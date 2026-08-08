@@ -413,8 +413,14 @@
     (is (= "draft" (:status page)))
     (is (= ["org" "emacs"] (:tags page)))
     (is (= 7 (:displayOrder page)))
-    (is (= [{:depth 2 :slug "real-section" :text "A real section"}
-            {:depth 3 :slug "nested-section" :text "Nested section"}]
+    (is (= [{:depth 2
+             :slug "real-section"
+             :text "A real section"
+             :outlinePath ["A real section"]}
+            {:depth 3
+             :slug "nested-section"
+             :text "Nested section"
+             :outlinePath ["A real section" "Nested section"]}]
            (:headings page)))
     (is (= 2 (:schemaVersion search-index)))
     (is (= 3 (count search-entries)))

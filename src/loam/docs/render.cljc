@@ -673,11 +673,13 @@
                                (filter #(and (= :headline (:type (:node %)))
                                              (not= (:path %) root-path)))
                                vec)
-        headings (mapv (fn [{:keys [node path]}]
+        page-outline-depth (count (:page/outline-path page))
+        headings (mapv (fn [{:keys [node path outline-path]}]
                          (let [entry (get-in index [:entries (model/node-key source path)])]
                            {:depth (heading-depth ctx node)
                             :slug (:anchor entry)
-                            :text (ast/node-title node)}))
+                            :text (ast/node-title node)
+                            :outlinePath (vec (drop page-outline-depth outline-path))}))
                        heading-locations)
         search-sections (mapv (fn [{:keys [node path]}]
                                 (let [entry (get-in index [:entries (model/node-key source path)])]
