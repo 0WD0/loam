@@ -472,6 +472,63 @@
     (is (re-matches #"[0-9a-f]{64}" (:contentRevision page)))
     (is (re-matches #"[0-9a-f]{64}" (:pageBuildDigest page)))))
 
+(deftest personal-backlink-occurrences-preserve-every-link-position
+  (let [source
+        (fixtures/headline
+         1 "Source"
+         {:ID "11111111-1111-4111-8111-111111111111"
+          :CUSTOM_ID "source"
+          :EXPORT_FILE_NAME "notes/source"
+          :DESCRIPTION "Source."}
+         (fixtures/headline
+          2 "References" {:CUSTOM_ID "references"}
+          (fixtures/section
+           (fixtures/paragraph
+            (fixtures/link "fuzzy" "Target detail" "first reference")
+            " and "
+            (fixtures/link "fuzzy" "Target detail" "second reference")))))
+        target
+        (fixtures/headline
+         1 "Target"
+         {:ID "22222222-2222-4222-8222-222222222222"
+          :CUSTOM_ID "target"
+          :EXPORT_FILE_NAME "notes/target"
+          :DESCRIPTION "Target."}
+         (fixtures/headline
+          2 "Target detail" {:CUSTOM_ID "target-detail"}
+          (fixtures/section (fixtures/paragraph "Target body."))))
+        result (compile/compile-documents
+                [(fixtures/envelope-input "content/source.org"
+                                          (fixtures/document "Source document" source))
+                 (fixtures/envelope-input "content/target.org"
+                                          (fixtures/document "Target document" target))]
+                {:require-source-spans? false :profile :loam/personal})
+        pages (get-in result [:artifacts :manifest :pages])
+        page-by-title (fn [title] (first (filter #(= title (:title %)) pages)))
+        source-page (page-by-title "Source")
+        target-page (page-by-title "Target")
+        occurrences (:backlinkOccurrences target-page)
+        source-html (get-in result [:artifacts :fragments "pages/notes-source.html"])]
+    (is (= :ok (:status result)) (:diagnostics result))
+    (is (= [(:id source-page)] (:backlinks target-page)))
+    (is (= [{:from (:id source-page) :to (:id target-page)}]
+           (get-in result [:artifacts :graph :edges])))
+    (is (= 2 (count occurrences)))
+    (is (= ["first reference" "second reference"] (mapv :linkText occurrences)))
+    (is (= ["References" "References"] (mapv :sourceHeading occurrences)))
+    (is (= ["/notes/source/#references" "/notes/source/#references"]
+           (mapv :sourceHeadingHref occurrences)))
+    (is (= ["/notes/target/#target-detail" "/notes/target/#target-detail"]
+           (mapv :targetHref occurrences)))
+    (is (= ["target-detail" "target-detail"] (mapv :targetAnchor occurrences)))
+    (is (= 2 (count (distinct (map :sourceHref occurrences))))
+        "each source link occurrence must have its own exact backlink href")
+    (doseq [occurrence occurrences]
+      (let [fragment (second (str/split (:sourceHref occurrence) #"#" 2))]
+        (is (str/includes? source-html (str "id=\"" fragment "\""))
+            "exact backlink href must name an anchor emitted beside the source link")))))
+
+
 (deftest personal-page-build-digest-separates-content-from-backlinks
   (let [target (fixtures/headline
                 1 "Target"

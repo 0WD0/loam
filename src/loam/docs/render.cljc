@@ -263,12 +263,16 @@
                                         :document (:document ctx)
                                         :node node}))
         [])
-      (let [{:keys [kind href attrs]} resolution]
+      (let [{:keys [kind href attrs source-anchor]} resolution
+            marker (when source-anchor
+                     [:span {:id source-anchor :data-org-link-occurrence true}])]
         (case kind
           :asset [[:figure.org-image
                    [:img {:src href :alt (str/trim (ast/text (ast/children node)))}]]]
           :download [(hiccup :a (merge {:href href :download true} attrs) label)]
-          [(hiccup :a (merge {:href href} attrs) label)])))))
+          (cond-> []
+            marker (conj marker)
+            true (conj (hiccup :a (merge {:href href} attrs) label))))))))
 
 (defn- heading-depth [ctx node]
   (let [root-level (or (-> (:page ctx) :page/root-ast ast/props :level) 0)

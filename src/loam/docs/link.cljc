@@ -36,7 +36,10 @@
 (defn- success [entry]
   {:entry entry
    :resolution {:kind :internal
-                :href (:href entry)}})
+                :href (:href entry)
+                :target-page-id (:page-id entry)
+                :target-node-key (:node-key entry)
+                :target-anchor (:anchor entry)}})
 
 (defn- choose [document node target candidates]
   (let [candidates (vec (distinct-entries candidates))]
@@ -185,7 +188,10 @@
                                                 "Document file link selector has no target"
                                                 document node {:target path})]}))
           (= 1 (count pages))
-          {:resolution {:kind :internal :href (:page/route (first pages))}}
+          (let [target-page (first pages)]
+            {:resolution {:kind :internal
+                          :href (:page/route target-page)
+                          :target-page-id (:page/id target-page)}})
           (> (count pages) 1)
           {:diagnostics [(link-diagnostic :error :ambiguous-link
                                           "Multi-page Org file link requires a selector"
@@ -235,6 +241,25 @@
     (cond-> (dissoc result :entry)
       unstable (update :diagnostics (fnil conj []) unstable))))
 
+(defn- nearest-source-heading [index source page-id location]
+  (some (fn [path]
+          (let [entry (docs.index/entry-for-node index source path)]
+            (when (and entry
+                       (= :headline (:node-type entry))
+                       (= page-id (:page-id entry)))
+              entry)))
+        (reverse (:ancestors location))))
+
+(defn- source-context [index page location]
+  (let [source (get-in page [:page/source :path])
+        heading (nearest-source-heading index source (:page/id page) location)
+        source-anchor (anchor/link-occurrence-id (:path location))]
+    {:source-anchor source-anchor
+     :source-href (anchor/with-fragment (:page/route page) source-anchor)
+     :source-heading-title (:title heading)
+     :source-heading-href (:href heading)
+     :source-link-text (some-> (:node location) ast/text str/trim)}))
+
 (defn resolve-links
   "Resolve every owned link against the global index. Ambiguous and unresolved
   internal links are hard errors; no candidate is selected by collection order."
@@ -248,14 +273,21 @@
               location (model/node-locations document)
               :when (and (= :link (:type (:node location)))
                          (model/owned? partition page source (:path location)))]
-          (let [result (resolve-one index document page location)]
+          (let [result (resolve-one index document page location)
+                context (source-context index page location)
+                resolution (cond-> (:resolution result)
+                             (= :internal (get-in result [:resolution :kind]))
+                             (assoc :source-anchor (:source-anchor context)))]
             (assoc result
                    :node-key (model/node-key source (:path location))
-                   :page-id (:page/id page))))]
+                   :page-id (:page/id page)
+                   :source-context context
+                   :resolution resolution)))]
     {:links (mapv (fn [result]
-                    {:node-key (:node-key result)
-                     :page-id (:page-id result)
-                     :resolution (:resolution result)})
+                    (merge {:node-key (:node-key result)
+                            :page-id (:page-id result)
+                            :resolution (:resolution result)}
+                           (:source-context result)))
                   results)
      :resolutions (into {}
                         (keep (fn [{:keys [node-key resolution]}]

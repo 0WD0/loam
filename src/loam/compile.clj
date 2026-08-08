@@ -346,6 +346,7 @@
         page-id (:page/id page)
         outgoing (vec (get-in relations [:outgoing page-id] []))
         backlinks (vec (get-in relations [:backlinks page-id] []))
+        backlink-occurrences (vec (get-in relations [:backlink-occurrences page-id] []))
         base
         (cond-> {:id page-id
                  :path (:page/path page)
@@ -363,7 +364,8 @@
                  :order (vec (:page/order page))
                  :childIds (vec (:page/children page))
                  :outgoingLinks outgoing
-                 :backlinks backlinks}
+                 :backlinks backlinks
+                 :backlinkOccurrences backlink-occurrences}
           (:page/version page) (assoc :version (:page/version page))
           (:page/parent page) (assoc :parentId (:page/parent page))
           (:page/previous page) (assoc :previousId (:page/previous page))
@@ -400,24 +402,35 @@
                 (:childIds page)
                 (mapv dependency (:outgoingLinks page))
                 (mapv dependency (:backlinks page))
+                (:backlinkOccurrences page)
                 (dependency (:parentId page))
                 (dependency (:previousId page))
                 (dependency (:nextId page))])))
      pages)))
 
-(defn- href-route [href]
-  (when (string? href)
-    (first (str/split href #"#" 2))))
+(defn- backlink-occurrence [{:keys [page-id resolution source-href
+                                         source-heading-title source-heading-href
+                                         source-link-text]}]
+  (let [target-page-id (:target-page-id resolution)]
+    (when (and (= :internal (:kind resolution))
+               target-page-id
+               (not= page-id target-page-id))
+      (cond-> {:sourcePageId page-id
+               :sourceHref source-href
+               :targetPageId target-page-id
+               :targetHref (:href resolution)}
+        source-heading-title (assoc :sourceHeading source-heading-title)
+        source-heading-href (assoc :sourceHeadingHref source-heading-href)
+        (not (str/blank? source-link-text)) (assoc :linkText source-link-text)
+        (:target-anchor resolution) (assoc :targetAnchor (:target-anchor resolution))))))
 
-(defn- link-relations [index resolution-result]
-  (let [edges (->> (:links resolution-result)
-                   (keep (fn [{:keys [page-id resolution]}]
-                           (when (= :internal (:kind resolution))
-                             (let [target-route (href-route (:href resolution))
-                                   target (get-in index [:routes (route/normalized-route-key target-route)])
-                                   target-id (:page/id target)]
-                               (when (and target-id (not= page-id target-id))
-                                 {:from page-id :to target-id})))))
+(defn- link-relations [_index resolution-result]
+  (let [occurrences (->> (:links resolution-result)
+                         (keep backlink-occurrence)
+                         vec)
+        edges (->> occurrences
+                   (map (fn [{:keys [sourcePageId targetPageId]}]
+                          {:from sourcePageId :to targetPageId}))
                    distinct
                    (sort-by (juxt :from :to))
                    vec)
@@ -427,11 +440,18 @@
         backlinks (reduce (fn [m {:keys [from to]}]
                             (update m to (fnil conj []) from))
                           {} edges)
+        backlink-occurrences
+        (reduce (fn [m occurrence]
+                  (update m (:targetPageId occurrence) (fnil conj []) occurrence))
+                {} occurrences)
         normalize (fn [m]
                     (into {} (map (fn [[k values]] [k (vec (sort (distinct values)))]) m)))]
     {:edges edges
      :outgoing (normalize outgoing)
-     :backlinks (normalize backlinks)}))
+     :backlinks (normalize backlinks)
+     :backlink-occurrences (into {}
+                                 (map (fn [[k values]] [k (vec values)]))
+                                 backlink-occurrences)}))
 
 (defn- search-entry-base [page]
   (select-keys page [:kind :status :tags :publishedAt :updatedAt]))

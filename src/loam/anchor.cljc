@@ -86,6 +86,16 @@
     (str url "#" (percent-encode-fragment fragment))
     url))
 
+(defn link-occurrence-id
+  "Return a deterministic local DOM id for a link at AST PATH.
+
+  The id identifies this exact rendered link occurrence within its logical page.
+  It is intentionally derived from the ownership path rather than link target, so
+  multiple links to the same page remain distinct backlink destinations."
+  [path]
+  (when (seq path)
+    (str "org-link-" (str/join "-" path))))
+
 (defn normalize-space
   "Trim S and collapse internal whitespace to a single ASCII space."
   [s]
