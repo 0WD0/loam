@@ -433,12 +433,51 @@
      :outgoing (normalize outgoing)
      :backlinks (normalize backlinks)}))
 
-(defn- search-index-model [pages]
-  {:schemaVersion 1
-   :pages (mapv (fn [page]
-                  (select-keys page [:id :route :title :description :kind :status :tags
-                                     :publishedAt :updatedAt :headings]))
-                pages)})
+(defn- search-entry-base [page]
+  (select-keys page [:kind :status :tags :publishedAt :updatedAt]))
+
+(defn- search-index-model [pages rendered-by-id]
+  (let [public-pages (mapv (fn [page]
+                             (select-keys page [:id :route :title :description :kind :status :tags
+                                                :publishedAt :updatedAt :headings]))
+                           pages)
+        entries
+        (->> pages
+             (mapcat
+              (fn [page]
+                (let [rendered (get rendered-by-id (:id page))
+                      search (:search rendered)
+                      base (search-entry-base page)
+                      page-entry (merge base
+                                        {:id (:id page)
+                                         :pageId (:id page)
+                                         :type "page"
+                                         :url (:route page)
+                                         :title (:title page)
+                                         :pageTitle (:title page)
+                                         :description (:description page)
+                                         :text (or (:text search) "")})
+                      section-entries
+                      (map-indexed
+                       (fn [index section]
+                         (let [slug (:slug section)]
+                           (merge base
+                                  {:id (str (:id page) "#" (or slug index))
+                                   :pageId (:id page)
+                                   :type "section"
+                                   :url (str (:route page) (when slug (str "#" slug)))
+                                   :title (:title section)
+                                   :pageTitle (:title page)
+                                   :depth (:depth section)
+                                   :slug slug
+                                   :text (or (:text section) "")})))
+                       (:sections search))]
+                  (into [page-entry] section-entries))))
+             vec)]
+    {:schemaVersion 2
+     ;; Retained for consumers that still want a page-only directory.
+     :pages public-pages
+     :entries entries}))
 
 (defn- graph-model [pages relations]
   {:schemaVersion 1
@@ -532,7 +571,7 @@
                                                       (:content-file fragment) relations
                                                       (get source-artifact-by-id (:page/id page))))))
                              attach-page-build-digests)
-            search-index (search-index-model page-models)
+            search-index (search-index-model page-models rendered-by-id)
             graph (graph-model page-models relations)
             content-hash (sha256 (str (pr-str source-models)
                                       "\n"

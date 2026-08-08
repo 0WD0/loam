@@ -275,6 +275,67 @@
         level (or (:level (ast/props node)) (inc root-level))]
     (max 2 (inc (- level root-level)))))
 
+(def search-hidden-types
+  #{:property-drawer :node-property :drawer :planning :clock :keyword
+    :comment :comment-block :export-block :export-snippet})
+
+(def search-value-types
+  #{:code :verbatim :radio-target :macro
+    :src-block :example-block :fixed-width :verse-block
+    :latex-fragment :latex-environment})
+
+(def search-container-types
+  #{:org-data :section :headline :plain-list :item :quote-block :center-block
+    :special-block :table :table-row :table-cell :footnote-definition})
+
+(declare search-node-text)
+
+(defn- normalize-search-text [value]
+  (-> (or value "")
+      (str/replace #"\s+" " ")
+      str/trim))
+
+(defn- search-children-text [node separator]
+  (->> (ast/children node)
+       (map search-node-text)
+       (remove str/blank?)
+       (str/join separator)))
+
+(defn- search-node-text [node]
+  (cond
+    (nil? node) ""
+    (string? node) node
+    (not (ast/node? node)) (str node)
+    (contains? search-hidden-types (:type node)) ""
+    (= :headline (:type node)) ""
+    (= :line-break (:type node)) "\n"
+    (= :horizontal-rule (:type node)) "\n"
+    (= :entity (:type node)) (or (:utf-8 (ast/props node))
+                                  (:name (ast/props node))
+                                  "")
+    (= :link (:type node)) (let [label (search-children-text node "")]
+                             (if (str/blank? label)
+                               (or (:raw-link (ast/props node))
+                                   (:path (ast/props node))
+                                   "")
+                               label))
+    (= :timestamp (:type node)) (or (:raw-value (ast/props node))
+                                     (:value (ast/props node))
+                                     "")
+    (= :footnote-reference (:type node)) (or (:label (ast/props node)) "*")
+    (contains? search-value-types (:type node)) (node-value node)
+    (= :paragraph (:type node)) (search-children-text node "")
+    (contains? search-container-types (:type node)) (search-children-text node "\n")
+    :else (search-children-text node "")))
+
+(defn- local-search-text [node]
+  (->> (ast/children node)
+       (remove #(and (ast/node? %) (= :headline (:type %))))
+       (map search-node-text)
+       (remove str/blank?)
+       (str/join "\n")
+       normalize-search-text))
+
 (declare render-secondary)
 
 (defn- render-secondary-children [node]
@@ -604,18 +665,29 @@
                                  :data-page-id (:page/id page)}]
                       body)
         diagnostics @collector
-        headings (->> (:locations coverage)
-                      (filter #(and (= :headline (:type (:node %)))
-                                    (not= (:path %) root-path)))
-                      (mapv (fn [{:keys [node path]}]
-                              (let [entry (get-in index [:entries (model/node-key source path)])]
-                                {:depth (heading-depth ctx node)
-                                 :slug (:anchor entry)
-                                 :text (ast/node-title node)}))))]
+        heading-locations (->> (:locations coverage)
+                               (filter #(and (= :headline (:type (:node %)))
+                                             (not= (:path %) root-path)))
+                               vec)
+        headings (mapv (fn [{:keys [node path]}]
+                         (let [entry (get-in index [:entries (model/node-key source path)])]
+                           {:depth (heading-depth ctx node)
+                            :slug (:anchor entry)
+                            :text (ast/node-title node)}))
+                       heading-locations)
+        search-sections (mapv (fn [{:keys [node path]}]
+                                (let [entry (get-in index [:entries (model/node-key source path)])]
+                                  {:depth (heading-depth ctx node)
+                                   :slug (:anchor entry)
+                                   :title (ast/node-title node)
+                                   :text (local-search-text node)}))
+                              heading-locations)]
     {:page-id (:page/id page)
      :html (when-not (some diagnostic/error? diagnostics)
              (html/render-canonical-html article))
      :headings headings
+     :search {:text (local-search-text root)
+              :sections search-sections}
      :coverage (dissoc coverage :locations)
      :diagnostics diagnostics
      :deferred? (pos? (get-in coverage [:dispositions :defer] 0))}))

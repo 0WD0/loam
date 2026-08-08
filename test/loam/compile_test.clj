@@ -378,11 +378,17 @@
                {:type :keyword :properties {:key "TITLE" :value "Document post"} :contents []}
                {:type :keyword :properties {:key "DESCRIPTION" :value "One Org file is one page."} :contents []}
                {:type :keyword :properties {:key "FILETAGS" :value ":org:emacs:"} :contents []}
-               (fixtures/paragraph "Intro."))
+               (fixtures/paragraph "Intro with "
+                                   {:type :code :properties {:value "CUSTOM_ID"} :contents []}
+                                   " inline."))
         section (fixtures/headline
                  1 "A real section"
                  {:CUSTOM_ID "real-section"}
-                 (fixtures/section (fixtures/paragraph "Section body.")))
+                 (fixtures/section (fixtures/paragraph "Section body."))
+                 (fixtures/headline
+                  2 "Nested section"
+                  {:CUSTOM_ID "nested-section"}
+                  (fixtures/section (fixtures/paragraph "Nested body only."))))
         ast {:type :org-data
              :properties {:ID "33333333-3333-4333-8333-333333333333"
                           :EXPORT_FILE_NAME "posts/document-post"
@@ -395,7 +401,9 @@
                 {:require-source-spans? false
                  :profile :loam/personal})
         page (get-in result [:artifacts :manifest :pages 0])
-        fragment (get-in result [:artifacts :fragments "pages/posts-document-post.html"])]
+        fragment (get-in result [:artifacts :fragments "pages/posts-document-post.html"])
+        search-index (get-in result [:artifacts :search-index])
+        search-entries (:entries search-index)]
     (is (= :ok (:status result)) (:diagnostics result))
     (is (= 1 (count (get-in result [:artifacts :manifest :pages]))))
     (is (= "/posts/document-post/" (:route page)))
@@ -405,10 +413,29 @@
     (is (= "draft" (:status page)))
     (is (= ["org" "emacs"] (:tags page)))
     (is (= 7 (:displayOrder page)))
-    (is (= [{:depth 2 :slug "real-section" :text "A real section"}]
+    (is (= [{:depth 2 :slug "real-section" :text "A real section"}
+            {:depth 3 :slug "nested-section" :text "Nested section"}]
            (:headings page)))
-    (is (str/includes? fragment "Intro."))
-    (is (str/includes? fragment "A real section"))))
+    (is (= 2 (:schemaVersion search-index)))
+    (is (= 3 (count search-entries)))
+    (is (= [{:type "page"
+             :url "/posts/document-post/"
+             :title "Document post"
+             :text "Intro with CUSTOM_ID inline."}
+            {:type "section"
+             :url "/posts/document-post/#real-section"
+             :title "A real section"
+             :text "Section body."}
+            {:type "section"
+             :url "/posts/document-post/#nested-section"
+             :title "Nested section"
+             :text "Nested body only."}]
+           (mapv #(select-keys % [:type :url :title :text]) search-entries)))
+    (is (not (str/includes? (:text (second search-entries)) "Nested body only."))
+        "parent section search text must not duplicate nested section body")
+    (is (str/includes? fragment "Intro with "))
+    (is (str/includes? fragment "A real section"))
+    (is (str/includes? fragment "Nested section"))))
 
 
 (deftest personal-profile-emits-exact-org-source-artifacts-and-revisions
