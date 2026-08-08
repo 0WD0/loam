@@ -103,21 +103,46 @@
             (is (= :unknown-semantic-node (get-in diagnostic [:data :node-type])))))
         (is (nil? (:artifacts result)))))))
 
-(deftest deferred-disposition-is-visible-and-unreleasable
+(deftest missing-latex-preview-is-a-render-error
   (let [latex {:type :latex-fragment :properties {:value "$x$"} :contents []}
-        ast (fixtures/document "Deferred"
-                               (fixtures/page "Deferred" "deferred" "guide/deferred"
+        ast (fixtures/document "Missing LaTeX"
+                               (fixtures/page "Missing LaTeX" "missing-latex" "guide/missing-latex"
                                               (fixtures/section (fixtures/paragraph latex))))
         result (compile/compile-documents
-                [(fixtures/envelope-input "docs/deferred.org" ast)]
+                [(fixtures/envelope-input "docs/missing-latex.org" ast)]
+                fixtures/compile-opts)]
+    (is (= :error (:status result)))
+    (is (some #(= :missing-latex-preview (:code %)) (:diagnostics result)))
+    (is (nil? (:artifacts result)))))
+
+(deftest renders-sanitized-latex-svg-preview
+  (let [svg "<?xml version='1.0'?><svg version='1.1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='10pt' height='5pt' viewBox='0 0 10 5'><defs><path id='g0' d='m0 0h1v1z'/></defs><g fill='currentColor'><use xlink:href='#g0'/></g></svg>"
+        latex {:type :latex-fragment
+               :properties {:value "$x$"
+                            :ox-edn/latex-preview {:provider :org-latex-preview
+                                                   :process 'dvisvgm
+                                                   :format :svg
+                                                   :sha256 "abc123"
+                                                   :svg svg
+                                                   :width 1.4
+                                                   :height 0.8
+                                                   :depth 0.1}}
+               :contents []}
+        ast (fixtures/document "LaTeX"
+                               (fixtures/page "LaTeX" "latex" "guide/latex"
+                                              (fixtures/section (fixtures/paragraph latex))))
+        result (compile/compile-documents
+                [(fixtures/envelope-input "docs/latex.org" ast)]
                 fixtures/compile-opts)
-        fragment (get-in result [:artifacts :fragments "pages/guide-deferred.html"])]
+        fragment (get-in result [:artifacts :fragments "pages/guide-latex.html"])]
     (is (= :ok (:status result)) (:diagnostics result))
-    (is (true? (get-in result [:artifacts :manifest :build :unreleasable])))
-    (is (= "unreleasable" (get-in result [:artifacts :report :status])))
-    (is (some #(= :deferred-node-type (:code %)) (:diagnostics result)))
-    (is (str/includes? fragment "data-org-deferred=\"latex-fragment\""))
-    (is (not (str/includes? fragment "$x$")))))
+    (is (false? (get-in result [:artifacts :manifest :build :unreleasable])))
+    (is (str/includes? fragment "class=\"org-latex org-latex-inline\""))
+    (is (str/includes? fragment "class=\"org-latex-svg\""))
+    (is (str/includes? fragment "fill=\"currentColor\""))
+    (is (str/includes? fragment "id=\"latex-abc123-g0\""))
+    (is (str/includes? fragment "xlink:href=\"#latex-abc123-g0\""))
+    (is (not (str/includes? fragment "<?xml")))))
 
 (deftest preserves-inline-post-blank-whitespace
   (let [verbatim {:type :verbatim
@@ -136,6 +161,80 @@
     (is (str/includes? fragment
                        "Use the <code class=\"org-verbatim\">jj</code> CLI."))
     (is (not (str/includes? fragment "</code>CLI")))))
+
+(deftest renders-kbd-macro-from-its-arguments
+  (let [macro {:type :macro
+               :properties {:key "kbd"
+                            :args {:type :anonymous :properties {} :contents ["C-c C-c"]}
+                            :value "{{{kbd(C-c C-c)}}}"}
+               :contents []}
+        ast (fixtures/document "Macro"
+                               (fixtures/page "Macro" "macro" "guide/macro"
+                                              (fixtures/section
+                                               (fixtures/paragraph "Press " macro "."))))
+        result (compile/compile-documents
+                [(fixtures/envelope-input "docs/macro.org" ast)]
+                fixtures/compile-opts)
+        fragment (get-in result [:artifacts :fragments "pages/guide-macro.html"])]
+    (is (= :ok (:status result)) (:diagnostics result))
+    (is (str/includes? fragment "<kbd>C-c C-c</kbd>"))
+    (is (not (str/includes? fragment "{{{kbd")))))
+
+(deftest renders-emacs-font-lock-runs-without-reinterpreting-source
+  (let [source "(defun demo () \"hello\")\n"
+        src {:type :src-block
+             :properties {:language "emacs-lisp"
+                          :value source
+                          :ox-edn/font-lock
+                          {:provider :emacs-font-lock
+                           :mode "emacs-lisp-mode"
+                           :runs [{:start 1
+                                   :end 6
+                                   :faces ["font-lock-keyword-face"]}
+                                  {:start 7
+                                   :end 11
+                                   :faces ["font-lock-function-name-face"]}]}}
+             :contents []}
+        ast (fixtures/document "Font lock"
+                               (fixtures/page "Font lock" "font-lock" "guide/font-lock"
+                                              (fixtures/section src)))
+        result (compile/compile-documents
+                [(fixtures/envelope-input "docs/font-lock.org" ast)]
+                fixtures/compile-opts)
+        fragment (get-in result [:artifacts :fragments "pages/guide-font-lock.html"])]
+    (is (= :ok (:status result)) (:diagnostics result))
+    (is (str/includes? fragment "data-highlight-provider=\"emacs-font-lock\""))
+    (is (str/includes? fragment "data-emacs-mode=\"emacs-lisp-mode\""))
+    (is (str/includes? fragment
+                       "<span class=\"ef-font-lock-keyword-face\" data-emacs-faces=\"font-lock-keyword-face\">defun</span>"))
+    (is (str/includes? fragment
+                       "<span class=\"ef-font-lock-function-name-face\" data-emacs-faces=\"font-lock-function-name-face\">demo</span>"))
+    (is (str/includes? fragment "&quot;hello&quot;"))))
+
+(deftest renders-checkbox-inline-with-its-first-item-paragraph
+  (let [checked {:type :item
+                 :properties {:checkbox :on}
+                 :contents [(fixtures/paragraph "Org remains source of truth")]}
+        mixed {:type :item
+               :properties {:checkbox :trans}
+               :contents [(fixtures/paragraph "Coverage is still growing")]}
+        list-node {:type :plain-list
+                   :properties {:type :unordered}
+                   :contents [checked mixed]}
+        ast (fixtures/document "Checkboxes"
+                               (fixtures/page "Checkboxes" "checkboxes" "guide/checkboxes"
+                                              (fixtures/section list-node)))
+        result (compile/compile-documents
+                [(fixtures/envelope-input "docs/checkboxes.org" ast)]
+                fixtures/compile-opts)
+        fragment (get-in result [:artifacts :fragments "pages/guide-checkboxes.html"])]
+    (is (= :ok (:status result)) (:diagnostics result))
+    (is (str/includes? fragment "<li><p class=\"org-paragraph\"><input"))
+    (is (str/includes? fragment ">Org remains source of truth</p></li>"))
+    (is (str/includes? fragment "checked disabled"))
+    (is (str/includes? fragment
+                       "aria-checked=\"mixed\""))
+    (is (not (str/includes? fragment "</input><p")))))
 
 (deftest renders-texinfo-compatible-keymap-scopes-as-html-data
   (let [vanilla (assoc (fixtures/paragraph "Use n and p.")
@@ -191,4 +290,116 @@
                                           fixtures/compile-opts)]
     (is (= :error (:status result)))
     (is (some #(= :absolute-path-leak (:code %)) (:diagnostics result)))
+    (is (nil? (:artifacts result)))))
+
+
+(deftest personal-profile-emits-unversioned-metadata-search-and-link-graph
+  (let [project (fixtures/headline
+                 1 "Majutsu"
+                 {:ID "11111111-1111-4111-8111-111111111111"
+                  :CUSTOM_ID "majutsu"
+                  :EXPORT_FILE_NAME "projects/majutsu"
+                  :DESCRIPTION "Jujutsu porcelain for Emacs."
+                  :LOAM_KIND "project"
+                  :LOAM_STATUS "active"
+                  :LOAM_FEATURED "t"
+                  :LOAM_ORDER "10"
+                  :LOAM_PUBLISHED_AT "2026-08-08"
+                  :tags {:type :anonymous :contents ["emacs" "jj"]}}
+                 (fixtures/section
+                  (fixtures/paragraph
+                   "See "
+                   (fixtures/link "custom-id" "wayland-ime" "the input note")
+                   ".")))
+        note (fixtures/headline
+              1 "Wayland input methods"
+              {:ID "22222222-2222-4222-8222-222222222222"
+               :CUSTOM_ID "wayland-ime"
+               :EXPORT_FILE_NAME "notes/wayland-input-methods"
+               :DESCRIPTION "Notes about virtual keyboards and IMEs."
+               :LOAM_KIND "note"
+               :LOAM_STATUS "growing"
+               :tags {:type :anonymous :contents ["wayland" "input"]}}
+              (fixtures/section (fixtures/paragraph "Body.")))
+        ast (fixtures/document "Personal" project note)
+        result (compile/compile-documents
+                [(fixtures/envelope-input "content/index.org" ast)]
+                {:require-source-spans? false
+                 :profile :loam/personal})
+        artifacts (:artifacts result)
+        pages (get-in artifacts [:manifest :pages])
+        project-page (first pages)
+        note-page (second pages)]
+    (is (= :ok (:status result)) (:diagnostics result))
+    (is (= "/projects/majutsu/" (:route project-page)))
+    (is (= "/notes/wayland-input-methods/" (:route note-page)))
+    (is (not (contains? project-page :version)))
+    (is (= "project" (:kind project-page)))
+    (is (= "active" (:status project-page)))
+    (is (= ["emacs" "jj"] (:tags project-page)))
+    (is (true? (:featured project-page)))
+    (is (= 10 (:displayOrder project-page)))
+    (is (= "2026-08-08" (:publishedAt project-page)))
+    (is (= [(:id note-page)] (:outgoingLinks project-page)))
+    (is (= [(:id project-page)] (:backlinks note-page)))
+    (is (= [{:from (:id project-page) :to (:id note-page)}]
+           (get-in artifacts [:graph :edges])))
+    (is (= 2 (count (get-in artifacts [:search-index :pages]))))
+    (is (contains? (:files artifacts) "search-index.json"))
+    (is (contains? (:files artifacts) "graph.json"))))
+
+
+(deftest personal-profile-supports-one-document-per-page
+  (let [intro (fixtures/section
+               {:type :keyword :properties {:key "TITLE" :value "Document post"} :contents []}
+               {:type :keyword :properties {:key "DESCRIPTION" :value "One Org file is one page."} :contents []}
+               {:type :keyword :properties {:key "FILETAGS" :value ":org:emacs:"} :contents []}
+               (fixtures/paragraph "Intro."))
+        section (fixtures/headline
+                 1 "A real section"
+                 {:CUSTOM_ID "real-section"}
+                 (fixtures/section (fixtures/paragraph "Section body.")))
+        ast {:type :org-data
+             :properties {:ID "33333333-3333-4333-8333-333333333333"
+                          :EXPORT_FILE_NAME "posts/document-post"
+                          :LOAM_KIND "post"
+                          :LOAM_STATUS "draft"
+                          :LOAM_ORDER "7"}
+             :contents [intro section]}
+        result (compile/compile-documents
+                [(fixtures/envelope-input "content/posts/document-post.org" ast)]
+                {:require-source-spans? false
+                 :profile :loam/personal})
+        page (get-in result [:artifacts :manifest :pages 0])
+        fragment (get-in result [:artifacts :fragments "pages/posts-document-post.html"])]
+    (is (= :ok (:status result)) (:diagnostics result))
+    (is (= 1 (count (get-in result [:artifacts :manifest :pages]))))
+    (is (= "/posts/document-post/" (:route page)))
+    (is (= "Document post" (:title page)))
+    (is (= "One Org file is one page." (:description page)))
+    (is (= "post" (:kind page)))
+    (is (= "draft" (:status page)))
+    (is (= ["org" "emacs"] (:tags page)))
+    (is (= 7 (:displayOrder page)))
+    (is (= [{:depth 2 :slug "real-section" :text "A real section"}]
+           (:headings page)))
+    (is (str/includes? fragment "Intro."))
+    (is (str/includes? fragment "A real section"))))
+
+(deftest personal-profile-requires-uuid-page-ids
+  (let [ast (fixtures/document
+             "Bad ID"
+             (fixtures/headline
+              1 "Bad ID"
+              {:ID "not-a-uuid"
+               :CUSTOM_ID "bad-id"
+               :EXPORT_FILE_NAME "notes/bad-id"
+               :DESCRIPTION "Invalid personal ID."}
+              (fixtures/section (fixtures/paragraph "Body."))))
+        result (compile/compile-documents
+                [(fixtures/envelope-input "content/bad-id.org" ast)]
+                {:require-source-spans? false
+                 :profile :loam/personal})]
+    (is (= :error (:status result)))
+    (is (some #(= :invalid-personal-page-id (:code %)) (:diagnostics result)))
     (is (nil? (:artifacts result)))))

@@ -3,7 +3,7 @@
 
   `compile-documents` performs load -> validate -> normalize -> partition ->
   index -> resolve -> render -> emit without filesystem writes. Use
-  `loam.emit.starlight/write-artifacts!` for atomic publication."
+  `loam.emit.bundle/write-artifacts!` for atomic publication."
   (:refer-clojure :exclude [load])
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
@@ -15,6 +15,7 @@
             [loam.docs.model :as model]
             [loam.docs.render :as docs.render]
             [loam.json :as json]
+            [loam.personal.model :as personal.model]
             [loam.route :as route])
   (:import [java.nio.charset StandardCharsets]
            [java.security MessageDigest]))
@@ -272,10 +273,12 @@
      :diagnostics (:diagnostics validated)}))
 
 (defn partition-pages [normalized opts system]
-  (reduce (fn [partition partitioner]
-            (partitioner partition opts))
-          (model/partition-documents (:documents normalized) opts)
-          (:page-partitioners system)))
+  (let [partitioner (or (:partitioner system) model/partition-documents)
+        partition (partitioner (:documents normalized) opts)]
+    (reduce (fn [partition post-partitioner]
+              (post-partitioner partition opts))
+            partition
+            (:page-partitioners system))))
 
 (defn index-pages [partition opts]
   (docs.index/build-index partition opts))
@@ -303,11 +306,11 @@
 (defn- page-content-file [page]
   (str "pages/" (str/replace (:page/path page) "/" "-") ".html"))
 
-(defn- manifest-page [page rendered digest content-file]
-  (let [source (:page/source page)]
-    (cond-> {:id (:page/id page)
+(defn- manifest-page [page rendered digest content-file relations]
+  (let [source (:page/source page)
+        page-id (:page/id page)]
+    (cond-> {:id page-id
              :path (:page/path page)
-             :version (:page/version page)
              :route (:page/route page)
              :title (:page/title page)
              :description (or (:page/description page) "")
@@ -318,11 +321,63 @@
                        (:end-line source) (assoc :endLine (:end-line source)))
              :headings (:headings rendered)
              :order (vec (:page/order page))
-             :childIds (vec (:page/children page))}
+             :childIds (vec (:page/children page))
+             :outgoingLinks (vec (get-in relations [:outgoing page-id] []))
+             :backlinks (vec (get-in relations [:backlinks page-id] []))}
+      (:page/version page) (assoc :version (:page/version page))
       (:page/parent page) (assoc :parentId (:page/parent page))
       (:page/previous page) (assoc :previousId (:page/previous page))
       (:page/next page) (assoc :nextId (:page/next page))
-      (:page/landing? page) (assoc :landing true))))
+      (:page/landing? page) (assoc :landing true)
+      (:page/kind page) (assoc :kind (:page/kind page))
+      (:page/status page) (assoc :status (:page/status page))
+      (contains? page :page/tags) (assoc :tags (vec (:page/tags page)))
+      (contains? page :page/featured?) (assoc :featured (boolean (:page/featured? page)))
+      (:page/published-at page) (assoc :publishedAt (:page/published-at page))
+      (:page/updated-at page) (assoc :updatedAt (:page/updated-at page))
+      (:page/display-order page) (assoc :displayOrder (:page/display-order page)))))
+
+(defn- href-route [href]
+  (when (string? href)
+    (first (str/split href #"#" 2))))
+
+(defn- link-relations [index resolution-result]
+  (let [edges (->> (:links resolution-result)
+                   (keep (fn [{:keys [page-id resolution]}]
+                           (when (= :internal (:kind resolution))
+                             (let [target-route (href-route (:href resolution))
+                                   target (get-in index [:routes (route/normalized-route-key target-route)])
+                                   target-id (:page/id target)]
+                               (when (and target-id (not= page-id target-id))
+                                 {:from page-id :to target-id})))))
+                   distinct
+                   (sort-by (juxt :from :to))
+                   vec)
+        outgoing (reduce (fn [m {:keys [from to]}]
+                           (update m from (fnil conj []) to))
+                         {} edges)
+        backlinks (reduce (fn [m {:keys [from to]}]
+                            (update m to (fnil conj []) from))
+                          {} edges)
+        normalize (fn [m]
+                    (into {} (map (fn [[k values]] [k (vec (sort (distinct values)))]) m)))]
+    {:edges edges
+     :outgoing (normalize outgoing)
+     :backlinks (normalize backlinks)}))
+
+(defn- search-index-model [pages]
+  {:schemaVersion 1
+   :pages (mapv (fn [page]
+                  (select-keys page [:id :route :title :description :kind :status :tags
+                                     :publishedAt :updatedAt :headings]))
+                pages)})
+
+(defn- graph-model [pages relations]
+  {:schemaVersion 1
+   :nodes (mapv (fn [page]
+                  (select-keys page [:id :route :title :kind :status :tags]))
+                pages)
+   :edges (:edges relations)})
 
 (defn- build-commit-id [opts]
   (get-in opts [:build :commitId]))
@@ -392,13 +447,16 @@
                                                    :deferred-asset :deferred-download}
                                                  (:code %))
                                      diagnostics)))
+            relations (link-relations index resolution-result)
             source-models (mapv manifest-source (:documents partition))
             page-models (mapv (fn [page]
                                 (let [rendered (get rendered-by-id (:page/id page))
                                       fragment (get fragment-by-id (:page/id page))]
                                   (manifest-page page rendered (:digest fragment)
-                                                 (:content-file fragment))))
+                                                 (:content-file fragment) relations)))
                               pages)
+            search-index (search-index-model page-models)
+            graph (graph-model page-models relations)
             content-hash (sha256 (str (pr-str source-models)
                                       "\n"
                                       (str/join "\n" (map (juxt :content-file :digest) fragment-data))))
@@ -435,11 +493,15 @@
                                      :data {:locations (mapv #(dissoc % :value) leaked)}})))}
           {:manifest manifest
            :report report
+           :search-index search-index
+           :graph graph
            :fragments (into (sorted-map)
                             (map (juxt :content-file :html) fragment-data))
            :files (into (sorted-map)
                         (concat [["manifest.json" (str (json/render-canonical-json manifest) "\n")]
-                                 ["build-report.json" (str (json/render-canonical-json report) "\n")]]
+                                 ["build-report.json" (str (json/render-canonical-json report) "\n")]
+                                 ["search-index.json" (str (json/render-canonical-json search-index) "\n")]
+                                 ["graph.json" (str (json/render-canonical-json graph) "\n")]]
                                 (map (juxt :content-file :html) fragment-data)))
            :diagnostics diagnostics
            :unreleasable? unreleasable?})))))
@@ -453,11 +515,19 @@
            :diagnostics diagnostics
            :status (if (has-errors? diagnostics) :error :ok))))
 
+(defn- profile-partitioner [opts]
+  (when (contains? #{:personal :loam/personal} (:profile opts))
+    personal.model/partition-documents))
+
 (defn compile-system
-  "Create a compiler service system. Static-site defaults are intentionally not
-  installed; docs rendering is an independent strict profile."
+  "Create a compiler service system. The docs partitioner remains the default;
+  profiles may replace the logical page model through the single-instance
+  :partitioner target."
   [opts]
-  (core/create-system {:extensions (vec (:extensions opts))}))
+  (let [partitioner (or (:partitioner opts) (profile-partitioner opts))]
+    (core/create-system
+     (cond-> {:extensions (vec (:extensions opts))}
+       partitioner (assoc :partitioner partitioner)))))
 
 (defn compile-documents
   "Pure compiler entry. Returns `{:status :ok :artifacts ...}` or a structured

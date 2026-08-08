@@ -24,8 +24,9 @@
 (defn text-content [node]
   (apply str (map #(if (string? %) % (or (-> % ast/props :value) "")) (ast/children node))))
 
-(defn compact [xs]
-  (remove nil? xs))
+(defn node-value [node]
+  (let [p (ast/props node)]
+    (or (:value p) (:raw-value p) (text-content node) "")))
 
 (defn target-id [node]
   (anchor/node-anchor-id node))
@@ -50,14 +51,36 @@
     (or rendered
         [(or (:raw-link (ast/props node)) (:path (ast/props node)) "")])))
 
+(defn- prepend-inline-marker [contents marker]
+  (if-not marker
+    contents
+    (if-let [first-node (first contents)]
+      (if (and (vector? first-node) (= :p (first first-node)))
+        (let [attrs? (map? (second first-node))
+              prefix (if attrs?
+                       [(first first-node) (second first-node) marker]
+                       [(first first-node) marker])
+              body (if attrs? (drop 2 first-node) (rest first-node))]
+          (into [(into prefix body)] (rest contents)))
+        (into [marker] contents))
+      [marker])))
+
 (defn render-list-item [ctx node]
   (let [checkbox (:checkbox (ast/props node))
         checkbox-node (case (ast/value-name checkbox)
                         "on" [:input {:type "checkbox" :checked true :disabled true}]
                         "off" [:input {:type "checkbox" :disabled true}]
-                        "trans" [:input {:type "checkbox" :data-indeterminate true :disabled true}]
-                        nil)]
-    [(hiccup :li (compact (cons checkbox-node (render-children ctx node))))]))
+                        "trans" [:input {:type "checkbox"
+                                         :class "org-checkbox-mixed"
+                                         :data-indeterminate true
+                                         :aria-checked "mixed"
+                                         :disabled true}]
+                        nil)
+        contents (prepend-inline-marker (render-children ctx node) checkbox-node)]
+    (if-let [tag (:tag (ast/props node))]
+      [(hiccup :dt (render-inline ctx tag))
+       (hiccup :dd contents)]
+      [(hiccup :li contents)])))
 
 (defn list-tag [node]
   (case (ast/value-name (:type (ast/props node)))
@@ -84,8 +107,8 @@
    :italic (fn [ctx node] [(hiccup :em (render-children ctx node))])
    :underline (fn [ctx node] [(hiccup :span.underline (render-children ctx node))])
    :strike-through (fn [ctx node] [(hiccup :del (render-children ctx node))])
-   :code (fn [_ node] [[:code (text-content node)]])
-   :verbatim (fn [_ node] [[:code.verbatim (text-content node)]])
+   :code (fn [_ node] [[:code (node-value node)]])
+   :verbatim (fn [_ node] [[:code.verbatim (node-value node)]])
    :subscript (fn [ctx node] [(hiccup :sub (render-children ctx node))])
    :superscript (fn [ctx node] [(hiccup :sup (render-children ctx node))])
    :link (fn [ctx node] [(hiccup :a {:href (link-href ctx (ast/props node))}

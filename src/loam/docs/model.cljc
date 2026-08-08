@@ -78,12 +78,22 @@
   (let [p (ast/props node)]
     (or (:EXPORT_FILE_NAME p) (:CUSTOM_ID p))))
 
+(defn- page-version [opts]
+  (if (contains? opts :version) (:version opts) "dev"))
+
+(defn- default-route-builder [{:keys [opts path]}]
+  (route/docs-route {:base (or (:base opts) "/docs")
+                     :version (page-version opts)
+                     :locale (:locale opts)
+                     :page-path path}))
+
 (defn- route-result [document node opts path]
   (try
-    {:route (route/docs-route {:base (or (:base opts) "/docs")
-                               :version (or (:version opts) "dev")
-                               :locale (:locale opts)
-                               :page-path path})}
+    (let [builder (or (:route-builder opts) default-route-builder)]
+      {:route (builder {:document document
+                        :node node
+                        :opts opts
+                        :path path})})
     (catch #?(:clj clojure.lang.ExceptionInfo :cljs :default) error
       {:diagnostic
        (diagnostic/error :unsafe-route
@@ -132,7 +142,7 @@
                              {:phase :partition :document document :node node})))]
     {:page (cond-> {:page/id id
                     :page/path path
-                    :page/version (or (:version opts) "dev")
+                    :page/version (page-version opts)
                     :page/route (:route route-result)
                     :page/source (page-source document node)
                     :page/title-ast (:title p)
@@ -159,7 +169,7 @@
         route-result (route-result document ast opts path)]
     {:page {:page/id id
             :page/path path
-            :page/version (or (:version opts) "dev")
+            :page/version (page-version opts)
             :page/route (:route route-result)
             :page/source (page-source document ast)
             :page/title-ast nil

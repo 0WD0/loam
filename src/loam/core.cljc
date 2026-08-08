@@ -17,6 +17,17 @@
 (defn- compose-hooks [values]
   (reduce merge-hooks {} values))
 
+(defn- compose-single-partitioner [values]
+  (let [values (vec (remove nil? values))]
+    (when (> (count values) 1)
+      (throw (ex-info "Loam :partitioner is a single-instance service target"
+                      {:target :partitioner
+                       :contributions (count values)})))
+    (first values)))
+
+(defn- replace-when-present [base contribution]
+  (if (nil? contribution) base contribution))
+
 (defn service-type
   "Create a service target description.
 
@@ -59,6 +70,12 @@
    :document-transforms (service-type {:default []
                                        :compose compose-vector
                                        :extend into})
+   ;; Unlike :page-partitioners, this target replaces the logical page model
+   ;; itself. Only one extension may own it so profile semantics cannot depend
+   ;; on extension ordering.
+   :partitioner (service-type {:default nil
+                               :compose compose-single-partitioner
+                               :extend replace-when-present})
    :page-partitioners (service-type {:default []
                                      :compose compose-vector
                                      :extend into})
@@ -88,6 +105,7 @@
     :hooks
     :validators
     :document-transforms
+    :partitioner
     :page-partitioners
     :diagnostic-rules
     :emitters})

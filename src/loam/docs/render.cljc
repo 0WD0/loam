@@ -9,7 +9,8 @@
             [loam.diagnostic :as diagnostic]
             [loam.docs.model :as model]
             [loam.docs.reference :as reference]
-            [loam.html :as html]))
+            [loam.html :as html]
+            [loam.svg :as svg]))
 
 (def allowed-special-blocks
   #{"note" "tip" "warning" "danger" "experimental" "compatibility"})
@@ -60,12 +61,13 @@
    :comment-block :hide
    :export-block :reject
    :export-snippet :reject
-   :latex-fragment :defer
+   :latex-fragment :render
+   :latex-environment :render
    :citation :defer
    :citation-reference :defer
    :statistics-cookie :defer})
 
-(declare render-node render-children)
+(declare render-node render-children report!)
 
 (defn- hiccup
   ([tag children] (into [tag] children))
@@ -74,6 +76,161 @@
 (defn- node-value [node]
   (let [p (ast/props node)]
     (or (:value p) (:raw-value p) (ast/text node) "")))
+
+(defn- emacs-face-class [face]
+  (str "ef-" (str/replace (str face) #"[^A-Za-z0-9_-]" "-")))
+
+(defn- font-lock-fragments
+  "Render zero-based half-open Emacs font-lock RUNS over SOURCE.
+
+  Invalid or overlapping runs are ignored rather than being allowed to alter
+  source text. ox-edn remains the authority that produces these offsets."
+  [source font-lock]
+  (let [length (count source)
+        runs (sort-by :start (:runs font-lock))]
+    (loop [cursor 0
+           runs runs
+           output []]
+      (if-let [{:keys [start end faces]} (first runs)]
+        (if (and (integer? start)
+                 (integer? end)
+                 (<= cursor start)
+                 (< start end)
+                 (<= end length)
+                 (seq faces))
+          (let [faces (mapv str faces)
+                output (cond-> output
+                         (< cursor start) (conj (subs source cursor start))
+                         true (conj [:span
+                                     {:class (str/join " " (map emacs-face-class faces))
+                                      :data-emacs-faces (str/join " " faces)}
+                                     (subs source start end)]))]
+            (recur end (rest runs) output))
+          (recur cursor (rest runs) output))
+        (cond-> output
+          (< cursor length) (conj (subs source cursor length)))))))
+
+(defn- latex-display? [node]
+  (let [value (str/triml (node-value node))]
+    (or (= :latex-environment (:type node))
+        (str/starts-with? value "$$")
+        (str/starts-with? value "\\[")
+        (str/starts-with? value "\\begin{"))))
+
+(defn- latex-svg-style [preview]
+  (let [width (:width preview)]
+    (str (when (number? width)
+           (str "width:" width "em;"))
+         "height:auto;")))
+
+(defn- latex-wrapper-style [preview display?]
+  (let [depth (:depth preview)]
+    (when (and (not display?) (number? depth) (pos? depth))
+      (str "vertical-align:-" depth "em;"))))
+
+(defn- latex-svg-id-prefix [preview]
+  (let [digest (:sha256 preview)]
+    (str "latex-" (subs (or digest "000000000000") 0 (min 12 (count (or digest "000000000000")))) "-")))
+
+(defn- namespace-svg-ref [prefix value]
+  (cond
+    (and (string? value) (str/starts-with? value "#"))
+    (str "#" prefix (subs value 1))
+
+    (and (string? value) (re-matches #"url\(#[A-Za-z0-9_.:-]+\)" value))
+    (str "url(#" prefix (subs value 5 (dec (count value))) ")")
+
+    :else value))
+
+(defn- namespace-latex-svg [hiccup preview]
+  (let [prefix (latex-svg-id-prefix preview)]
+    (letfn [(rewrite [node]
+              (if-not (vector? node)
+                node
+                (let [[tag maybe-attrs & body] node
+                      attrs? (map? maybe-attrs)
+                      attrs (if attrs? maybe-attrs {})
+                      children (if attrs? body (cons maybe-attrs body))
+                      attrs (cond-> attrs
+                              (:id attrs) (update :id #(str prefix %))
+                              (:href attrs) (update :href #(namespace-svg-ref prefix %))
+                              (:xlink:href attrs) (update :xlink:href #(namespace-svg-ref prefix %))
+                              (:clip-path attrs) (update :clip-path #(namespace-svg-ref prefix %)))]
+                  (into [tag attrs] (map rewrite children)))))]
+      (rewrite hiccup))))
+
+(defn- prepare-latex-svg [preview display?]
+  (let [[tag attrs & children]
+        (namespace-latex-svg (svg/parse-safe-svg (:svg preview)) preview)
+        attrs (-> attrs
+                  (dissoc :width :height)
+                  (assoc :class "org-latex-svg"
+                         :aria-hidden "true"
+                         :focusable "false"
+                         :style (latex-svg-style preview)))]
+    (into [tag attrs] children)))
+
+(defn- latex-renderer [ctx node _path]
+  (let [preview (:ox-edn/latex-preview (ast/props node))
+        display? (latex-display? node)
+        source (node-value node)]
+    (cond
+      (not (and (map? preview)
+                (= "svg" (ast/value-name (:format preview)))
+                (string? (:svg preview))))
+      (do
+        (report! ctx
+                 (diagnostic/error :missing-latex-preview
+                                   "LaTeX node has no ox-edn SVG preview metadata"
+                                   {:phase :render
+                                    :document (:document ctx)
+                                    :node node}))
+        [])
+
+      :else
+      (try
+        (let [svg (prepare-latex-svg preview display?)
+              attrs (cond-> {:class (str "org-latex "
+                                          (if display?
+                                            "org-latex-display"
+                                            "org-latex-inline"))
+                              :role "img"
+                              :aria-label source}
+                      (latex-wrapper-style preview display?)
+                      (assoc :style (latex-wrapper-style preview display?))
+                      (:sha256 preview)
+                      (assoc :data-latex-sha256 (:sha256 preview)))]
+          [(hiccup :span attrs [svg])])
+        (catch #?(:clj Exception :cljs :default) error
+          (report! ctx
+                   (diagnostic/error :unsafe-latex-svg
+                                     "Generated LaTeX SVG failed strict sanitization"
+                                     {:phase :render
+                                      :document (:document ctx)
+                                      :node node
+                                      :data {:reason #?(:clj (ex-message error)
+                                                        :cljs (str error))
+                                             :code #?(:clj (:code (ex-data error))
+                                                      :cljs nil)}}))
+          [])))))
+
+(defn- src-block-renderer [_ctx node _path]
+  (let [props (ast/props node)
+        language (:language props)
+        source (node-value node)
+        font-lock (:ox-edn/font-lock props)
+        mode (:mode font-lock)
+        provider (:provider font-lock)
+        attrs (cond-> {}
+                language (assoc :class (str "language-" language))
+                provider (assoc :data-highlight-provider (ast/value-name provider))
+                mode (assoc :data-emacs-mode mode))
+        contents (if (and (= "emacs-font-lock" (ast/value-name provider))
+                          (seq (:runs font-lock)))
+                   (font-lock-fragments source font-lock)
+                   [source])]
+    [[:figure {:class "org-src-block"}
+      [:pre (into [:code attrs] contents)]]]))
 
 (defn- render-children [ctx node path]
   (mapcat (fn [[index child]]
@@ -182,27 +339,51 @@
   (when-let [scopes (seq (:reference/scopes entry))]
     {:data-keymap-scope (str/join " " scopes)}))
 
+(defn- prepend-inline-marker
+  "Insert MARKER at the start of the first rendered paragraph in CONTENTS.
+
+  Org checkboxes belong to the item marker, not to a separate block. Keeping
+  the marker inside the first paragraph preserves that inline relationship in
+  HTML. If an unusual item has no leading paragraph, fall back to a direct
+  child so no semantic marker is lost."
+  [contents marker]
+  (if-not marker
+    contents
+    (if-let [first-node (first contents)]
+      (if (and (vector? first-node) (= :p (first first-node)))
+        (let [attrs? (map? (second first-node))
+              prefix (if attrs?
+                       [(first first-node) (second first-node) marker]
+                       [(first first-node) marker])
+              body (if attrs? (drop 2 first-node) (rest first-node))]
+          (into [(into prefix body)] (rest contents)))
+        (into [marker] contents))
+      [marker])))
+
 (defn- item-renderer [ctx node path]
   (let [p (ast/props node)
         entry (get-in (:index ctx) [:entries (model/node-key (:source ctx) path)])
         checkbox (case (ast/value-name (:checkbox p))
                    "on" [:input {:type "checkbox" :checked true :disabled true}]
                    "off" [:input {:type "checkbox" :disabled true}]
-                   "trans" [:input {:type "checkbox" :data-indeterminate true :disabled true}]
+                   "trans" [:input {:type "checkbox"
+                                    :class "org-checkbox-mixed"
+                                    :data-indeterminate true
+                                    :aria-checked "mixed"
+                                    :disabled true}]
                    nil)
-        children (cond-> [] checkbox (conj checkbox))
-        contents (render-children ctx node path)
+        contents (prepend-inline-marker (render-children ctx node path) checkbox)
         scoped-attrs (reference-keymap-attrs entry)]
     (if-let [tag (:tag p)]
       [(if (:reference/source? entry)
-         [:dt (merge {:id (:anchor entry)
-                      :class "org-reference-source-term"
-                      :data-reference-source true}
-                     scoped-attrs)
-          (ast/text tag)]
-         [:dt (or scoped-attrs {}) (ast/text tag)])
-       (into [:dd (or scoped-attrs {})] (concat children contents))]
-      [(into [:li] (concat children contents))])))
+         (into [:dt (merge {:id (:anchor entry)
+                            :class "org-reference-source-term"
+                            :data-reference-source true}
+                           scoped-attrs)]
+               (render-secondary tag))
+         (into [:dt (or scoped-attrs {})] (render-secondary tag)))
+       (into [:dd (or scoped-attrs {})] contents)]
+      [(into [:li] contents)])))
 
 (defn- special-block-renderer [ctx node path]
   (let [kind (some-> (or (:block-type (ast/props node))
@@ -229,9 +410,13 @@
 (defn- macro-renderer [ctx node _path]
   (let [p (ast/props node)
         name (some-> (or (:key p) (:name p)) ast/value-name str/lower-case)
-        value (or (:value p) (:arguments p) (:raw-value p) "")]
+        arguments (or (some-> (:args p) ast/text not-empty)
+                      (:arguments p)
+                      (:raw-value p)
+                      (:value p)
+                      "")]
     (if (= "kbd" name)
-      [[:kbd value]]
+      [[:kbd arguments]]
       (do
         (report! ctx
                  (diagnostic/warning :deferred-macro
@@ -240,7 +425,7 @@
                                       :document (:document ctx)
                                       :node node
                                       :data {:macro name}}))
-        [[:span {:class "org-deferred" :data-org-deferred "macro"} value]]))))
+        [[:span {:class "org-deferred" :data-org-deferred "macro"} arguments]]))))
 
 (defn default-renderers []
   {:org-data (fn [ctx node path] (render-children ctx node path))
@@ -272,11 +457,9 @@
    :plain-list (fn [ctx node path] [(hiccup (list-tag node) (or (keymap-attrs node) {})
                                            (render-children ctx node path))])
    :item item-renderer
-   :src-block (fn [_ node _]
-                (let [language (:language (ast/props node))]
-                  [[:figure {:class "org-src-block"}
-                    [:pre [:code (cond-> {} language (assoc :class (str "language-" language)))
-                           (node-value node)]]]]))
+   :latex-fragment latex-renderer
+   :latex-environment latex-renderer
+   :src-block src-block-renderer
    :example-block (fn [_ node _] [[:pre {:class "org-example"} (node-value node)]])
    :fixed-width (fn [_ node _] [[:pre {:class "org-fixed-width"} (node-value node)]])
    :quote-block (fn [ctx node path] [(hiccup :blockquote (render-children ctx node path))])

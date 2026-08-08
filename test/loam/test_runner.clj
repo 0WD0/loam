@@ -18,6 +18,7 @@
             [loam.route-test]
             [loam.shiki-test]
             [loam.site-test]
+            [loam.svg-test]
             [loam.toc-test]
             [loam.treesitter-wasm-test]))
 
@@ -40,6 +41,7 @@
                                'loam.route-test
                                'loam.shiki-test
                                'loam.site-test
+                               'loam.svg-test
                                'loam.toc-test
                                'loam.treesitter-wasm-test)]
     (when (pos? (+ (:fail result) (:error result)))

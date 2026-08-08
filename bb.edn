@@ -2,7 +2,9 @@
  :tasks
  {test {:doc "Run all tests"
         :task (exec 'loam.test-runner/-main)}
-  docs {:doc "Compile ox-edn Envelope v1 files into Manifest v1 fragments"
+  docs {:doc "Compile ox-edn Envelope v1 files with the legacy docs profile"
         :task (apply clojure "-M -m loam.emit.starlight" *command-line-args*)}
+  bundle {:doc "Compile ox-edn Envelope v1 files into a generic web bundle"
+          :task (apply clojure "-M -m loam.emit.bundle" *command-line-args*)}
   build {:doc "Build a static site from EDN files"
          :task (apply clojure "-M -m loam.site" *command-line-args*)}}}

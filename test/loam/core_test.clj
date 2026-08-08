@@ -50,12 +50,26 @@
   (let [extension {:id :compiler
                    :extends {:validators [:validate]
                              :document-transforms [:normalize]
+                             :partitioner :replace-partition
                              :page-partitioners [:partition]
                              :diagnostic-rules [:diagnose]
                              :emitters [:emit]}}
         system (loam/create-system {:extensions [extension]})]
     (is (= [:validate] (:validators system)))
     (is (= [:normalize] (:document-transforms system)))
+    (is (= :replace-partition (:partitioner system)))
     (is (= [:partition] (:page-partitioners system)))
     (is (= [:diagnose] (:diagnostic-rules system)))
     (is (= [:emit] (:emitters system)))))
+
+
+(deftest rejects-multiple-single-instance-partitioners
+  (try
+    (loam/create-system
+     {:extensions [{:id :a :extends {:partitioner :a}}
+                   {:id :b :extends {:partitioner :b}}]})
+    (is false "Expected single-instance partitioner error")
+    (catch clojure.lang.ExceptionInfo error
+      (is (= "Loam :partitioner is a single-instance service target"
+             (ex-message error)))
+      (is (= :partitioner (:target (ex-data error)))))))

@@ -88,6 +88,28 @@
   [value]
   (some-> value str/lower-case))
 
+(defn site-route
+  "Build a canonical trailing-slash site route from BASE and PAGE-PATH.
+
+  BASE may be `/` for a root-level personal site. PAGE-PATH remains an
+  extensionless safe logical path."
+  [{:keys [base page-path]
+    :or {base "/"}}]
+  (let [base-path (str/replace (or base "") #"^/+|/+$" "")
+        invalid (cond-> {}
+                  (and (not (str/blank? base-path))
+                       (seq (page-path-problems base-path)))
+                  (assoc :base (page-path-problems base-path))
+                  (seq (page-path-problems page-path))
+                  (assoc :page-path (page-path-problems page-path)))]
+    (when (seq invalid)
+      (throw (ex-info "Unsafe Loam site route"
+                      {:code :unsafe-route
+                       :fields invalid})))
+    (str "/"
+         (str/join "/" (remove str/blank? [base-path page-path]))
+         "/")))
+
 (defn docs-route
   "Build a canonical trailing-slash docs route from explicit profile fields.
 
