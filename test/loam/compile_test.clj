@@ -146,6 +146,28 @@
     (is (str/includes? fragment "xlink:href=\"#latex-abc123-g0\""))
     (is (not (str/includes? fragment "<?xml")))))
 
+
+(deftest org-table-rule-promotes-leading-rows-to-header
+  (let [cell (fn [value] {:type :table-cell :properties {} :contents [value]})
+        row (fn [& cells] {:type :table-row :properties {:type :standard} :contents (vec cells)})
+        rule {:type :table-row :properties {:type :rule} :contents []}
+        table {:type :table
+               :properties {:type :org}
+               :contents [(row (cell "Layer") (cell "Understands graph"))
+                          rule
+                          (row (cell "Loam") (cell "yes"))]}
+        ast (fixtures/document "Table"
+                               (fixtures/page "Table" "table" "guide/table"
+                                              (fixtures/section table)))
+        result (compile/compile-documents
+                [(fixtures/envelope-input "docs/table.org" ast)]
+                fixtures/compile-opts)
+        fragment (get-in result [:artifacts :fragments "pages/guide-table.html"])]
+    (is (= :ok (:status result)) (:diagnostics result))
+    (is (str/includes? fragment "<thead><tr><th scope=\"col\">Layer</th><th scope=\"col\">Understands graph</th></tr></thead>"))
+    (is (str/includes? fragment "<tbody><tr><td>Loam</td><td>yes</td></tr></tbody>"))
+    (is (not (str/includes? fragment ">rule<")))))
+
 (deftest preserves-inline-post-blank-whitespace
   (let [verbatim {:type :verbatim
                   :properties {:value "jj" :post-blank 1}
@@ -387,6 +409,86 @@
            (:headings page)))
     (is (str/includes? fragment "Intro."))
     (is (str/includes? fragment "A real section"))))
+
+
+(deftest personal-profile-emits-exact-org-source-artifacts-and-revisions
+  (let [source "* One\n:PROPERTIES:\n:ID: 11111111-1111-4111-8111-111111111111\n:EXPORT_FILE_NAME: notes/one\n:DESCRIPTION: One.\n:END:\nBody one.\n\n* Two\n:PROPERTIES:\n:ID: 22222222-2222-4222-8222-222222222222\n:EXPORT_FILE_NAME: notes/two\n:DESCRIPTION: Two.\n:END:\nBody two.\n"
+        split (.indexOf source "* Two")
+        first-end (inc split)
+        second-begin (inc split)
+        second-end (inc (count source))
+        one (fixtures/headline
+             1 "One"
+             {:ID "11111111-1111-4111-8111-111111111111"
+              :EXPORT_FILE_NAME "notes/one"
+              :DESCRIPTION "One."
+              :begin 1 :end first-end}
+             (fixtures/section (fixtures/paragraph "Body one.")))
+        two (fixtures/headline
+             1 "Two"
+             {:ID "22222222-2222-4222-8222-222222222222"
+              :EXPORT_FILE_NAME "notes/two"
+              :DESCRIPTION "Two."
+              :begin second-begin :end second-end}
+             (fixtures/section (fixtures/paragraph "Body two.")))
+        ast (fixtures/document "Sources" one two)
+        result (compile/compile-documents
+                [(fixtures/envelope-input "content/workbench.org" ast source)]
+                {:require-source-spans? false :profile :loam/personal})
+        page (first (get-in result [:artifacts :manifest :pages]))
+        source-file (:sourceFile page)
+        source-text (get-in result [:artifacts :files source-file])]
+    (is (= :ok (:status result)) (:diagnostics result))
+    (is (= "source/notes/one.org" source-file))
+    (is (= (subs source 0 split) source-text))
+    (is (= (compile/sha256 source-text) (:sourceRevision page)))
+    (is (re-matches #"[0-9a-f]{64}" (:contentRevision page)))
+    (is (re-matches #"[0-9a-f]{64}" (:pageBuildDigest page)))))
+
+(deftest personal-page-build-digest-separates-content-from-backlinks
+  (let [target (fixtures/headline
+                1 "Target"
+                {:ID "11111111-1111-4111-8111-111111111111"
+                 :CUSTOM_ID "target"
+                 :EXPORT_FILE_NAME "notes/target"
+                 :DESCRIPTION "Target."}
+                (fixtures/section (fixtures/paragraph "Target body.")))
+        source-without-link
+        (fixtures/headline
+         1 "Source"
+         {:ID "22222222-2222-4222-8222-222222222222"
+          :CUSTOM_ID "source"
+          :EXPORT_FILE_NAME "notes/source"
+          :DESCRIPTION "Source."}
+         (fixtures/section (fixtures/paragraph "No link yet.")))
+        source-with-link
+        (fixtures/headline
+         1 "Source"
+         {:ID "22222222-2222-4222-8222-222222222222"
+          :CUSTOM_ID "source"
+          :EXPORT_FILE_NAME "notes/source"
+          :DESCRIPTION "Source."}
+         (fixtures/section
+          (fixtures/paragraph "Now links to "
+                              (fixtures/link "custom-id" "target" "Target") ".")))
+        compile* (fn [source]
+                   (compile/compile-documents
+                    [(fixtures/envelope-input "content/workbench.org"
+                                              (fixtures/document "Graph" target source))]
+                    {:require-source-spans? false :profile :loam/personal}))
+        before (compile* source-without-link)
+        after (compile* source-with-link)
+        page-by-title (fn [result title]
+                        (first (filter #(= title (:title %))
+                                       (get-in result [:artifacts :manifest :pages]))))
+        target-before (page-by-title before "Target")
+        target-after (page-by-title after "Target")]
+    (is (= :ok (:status before)) (:diagnostics before))
+    (is (= :ok (:status after)) (:diagnostics after))
+    (is (= (:contentRevision target-before) (:contentRevision target-after)))
+    (is (not= (:pageBuildDigest target-before) (:pageBuildDigest target-after)))
+    (is (= [] (:backlinks target-before)))
+    (is (= [(:id (page-by-title after "Source"))] (:backlinks target-after)))))
 
 (deftest personal-profile-requires-uuid-page-ids
   (let [ast (fixtures/document

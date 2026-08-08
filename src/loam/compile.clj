@@ -306,36 +306,104 @@
 (defn- page-content-file [page]
   (str "pages/" (str/replace (:page/path page) "/" "-") ".html"))
 
-(defn- manifest-page [page rendered digest content-file relations]
+(defn- page-source-file [page]
+  (str "source/" (:page/path page) ".org"))
+
+(defn- exact-page-source
+  "Return the exact Org source slice owned by PAGE when source spans are available.
+
+  Document pages naturally slice the full file. Headline pages slice the original
+  subtree characters rather than round-tripping the AST back through Org."
+  [document page]
+  (let [source (:source-content document)
+        {:keys [begin end]} (:page/source page)
+        limit (when source (inc (count source)))]
+    (cond
+      (and source (integer? begin) (integer? end)
+           (pos? begin) (<= begin end) (<= end limit))
+      (subs source (dec begin) (dec end))
+
+      ;; Synthetic compiler tests may omit spans. A document-page root still owns
+      ;; the complete source file, so the exact file remains unambiguous.
+      (and source (= :org-data (:type (:page/root-ast page))))
+      source
+
+      :else nil)))
+
+(defn- revision-digest [parts]
+  (sha256 (pr-str parts)))
+
+(defn- page-source-artifact [documents-by-source page]
+  (when-let [document (get documents-by-source (get-in page [:page/source :path]))]
+    (when-let [source (exact-page-source document page)]
+      {:page-id (:page/id page)
+       :file (page-source-file page)
+       :content source
+       :revision (sha256 source)})))
+
+(defn- manifest-page [page rendered digest content-file relations source-artifact]
   (let [source (:page/source page)
-        page-id (:page/id page)]
-    (cond-> {:id page-id
-             :path (:page/path page)
-             :route (:page/route page)
-             :title (:page/title page)
-             :description (or (:page/description page) "")
-             :contentFile content-file
-             :digest digest
-             :source (cond-> {:path (:path source)}
-                       (:start-line source) (assoc :startLine (:start-line source))
-                       (:end-line source) (assoc :endLine (:end-line source)))
-             :headings (:headings rendered)
-             :order (vec (:page/order page))
-             :childIds (vec (:page/children page))
-             :outgoingLinks (vec (get-in relations [:outgoing page-id] []))
-             :backlinks (vec (get-in relations [:backlinks page-id] []))}
-      (:page/version page) (assoc :version (:page/version page))
-      (:page/parent page) (assoc :parentId (:page/parent page))
-      (:page/previous page) (assoc :previousId (:page/previous page))
-      (:page/next page) (assoc :nextId (:page/next page))
-      (:page/landing? page) (assoc :landing true)
-      (:page/kind page) (assoc :kind (:page/kind page))
-      (:page/status page) (assoc :status (:page/status page))
-      (contains? page :page/tags) (assoc :tags (vec (:page/tags page)))
-      (contains? page :page/featured?) (assoc :featured (boolean (:page/featured? page)))
-      (:page/published-at page) (assoc :publishedAt (:page/published-at page))
-      (:page/updated-at page) (assoc :updatedAt (:page/updated-at page))
-      (:page/display-order page) (assoc :displayOrder (:page/display-order page)))))
+        page-id (:page/id page)
+        outgoing (vec (get-in relations [:outgoing page-id] []))
+        backlinks (vec (get-in relations [:backlinks page-id] []))
+        base
+        (cond-> {:id page-id
+                 :path (:page/path page)
+                 :route (:page/route page)
+                 :title (:page/title page)
+                 :description (or (:page/description page) "")
+                 :contentFile content-file
+                 ;; `digest' remains the rendered Org-fragment digest for
+                 ;; Manifest v1 compatibility.
+                 :digest digest
+                 :source (cond-> {:path (:path source)}
+                           (:start-line source) (assoc :startLine (:start-line source))
+                           (:end-line source) (assoc :endLine (:end-line source)))
+                 :headings (:headings rendered)
+                 :order (vec (:page/order page))
+                 :childIds (vec (:page/children page))
+                 :outgoingLinks outgoing
+                 :backlinks backlinks}
+          (:page/version page) (assoc :version (:page/version page))
+          (:page/parent page) (assoc :parentId (:page/parent page))
+          (:page/previous page) (assoc :previousId (:page/previous page))
+          (:page/next page) (assoc :nextId (:page/next page))
+          (:page/landing? page) (assoc :landing true)
+          (:page/kind page) (assoc :kind (:page/kind page))
+          (:page/status page) (assoc :status (:page/status page))
+          (contains? page :page/tags) (assoc :tags (vec (:page/tags page)))
+          (contains? page :page/featured?) (assoc :featured (boolean (:page/featured? page)))
+          (:page/published-at page) (assoc :publishedAt (:page/published-at page))
+          (:page/updated-at page) (assoc :updatedAt (:page/updated-at page))
+          (:page/display-order page) (assoc :displayOrder (:page/display-order page))
+          source-artifact (assoc :sourceFile (:file source-artifact)
+                                 :sourceRevision (:revision source-artifact)))
+        content-revision
+        (revision-digest
+         [(:title base) (:description base) (:route base)
+          (:kind base) (:status base) (:tags base) (:featured base)
+          (:publishedAt base) (:updatedAt base) digest])]
+    (assoc base :contentRevision content-revision)))
+
+(defn- attach-page-build-digests [pages]
+  (let [by-id (into {} (map (juxt :id identity) pages))
+        dependency (fn [id]
+                     (when-let [page (get by-id id)]
+                       [id (:contentRevision page)]))]
+    (mapv
+     (fn [page]
+       (assoc page :pageBuildDigest
+              (revision-digest
+               [(:contentRevision page)
+                (:sourceRevision page)
+                (:headings page)
+                (:childIds page)
+                (mapv dependency (:outgoingLinks page))
+                (mapv dependency (:backlinks page))
+                (dependency (:parentId page))
+                (dependency (:previousId page))
+                (dependency (:nextId page))])))
+     pages)))
 
 (defn- href-route [href]
   (when (string? href)
@@ -449,12 +517,21 @@
                                      diagnostics)))
             relations (link-relations index resolution-result)
             source-models (mapv manifest-source (:documents partition))
-            page-models (mapv (fn [page]
-                                (let [rendered (get rendered-by-id (:page/id page))
-                                      fragment (get fragment-by-id (:page/id page))]
-                                  (manifest-page page rendered (:digest fragment)
-                                                 (:content-file fragment) relations)))
-                              pages)
+            documents-by-source
+            (into {} (map (juxt #(get-in % [:source :path]) identity)
+                          (:documents partition)))
+            source-artifacts
+            (into [] (keep #(page-source-artifact documents-by-source %)) pages)
+            source-artifact-by-id
+            (into {} (map (juxt :page-id identity) source-artifacts))
+            page-models (->> pages
+                             (mapv (fn [page]
+                                     (let [rendered (get rendered-by-id (:page/id page))
+                                           fragment (get fragment-by-id (:page/id page))]
+                                       (manifest-page page rendered (:digest fragment)
+                                                      (:content-file fragment) relations
+                                                      (get source-artifact-by-id (:page/id page))))))
+                             attach-page-build-digests)
             search-index (search-index-model page-models)
             graph (graph-model page-models relations)
             content-hash (sha256 (str (pr-str source-models)
@@ -502,7 +579,8 @@
                                  ["build-report.json" (str (json/render-canonical-json report) "\n")]
                                  ["search-index.json" (str (json/render-canonical-json search-index) "\n")]
                                  ["graph.json" (str (json/render-canonical-json graph) "\n")]]
-                                (map (juxt :content-file :html) fragment-data)))
+                                (map (juxt :content-file :html) fragment-data)
+                                (map (juxt :file :content) source-artifacts)))
            :diagnostics diagnostics
            :unreleasable? unreleasable?})))))
 

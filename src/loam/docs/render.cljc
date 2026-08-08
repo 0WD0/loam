@@ -430,6 +430,34 @@
                                       :data {:macro name}}))
         [[:span {:class "org-deferred" :data-org-deferred "macro"} arguments]]))))
 
+(defn- table-renderer [ctx node path]
+  (let [rows (vec (ast/children node))
+        rule-index (first (keep-indexed
+                           (fn [index row]
+                             (when (and (ast/node? row)
+                                        (= :table-row (:type row))
+                                        (= "rule" (ast/value-name (:type (ast/props row)))))
+                               index))
+                           rows))
+        render-rows (fn [start end header?]
+                      (mapcat
+                       (fn [index]
+                         (let [row (nth rows index)]
+                           (if (and (ast/node? row) (= :table-row (:type row)))
+                             (render-node (assoc ctx :table-cell-tag (if header? :th :td))
+                                          row (conj path index))
+                             [])))
+                       (range start end)))
+        header (when (and rule-index (pos? rule-index))
+                 (vec (render-rows 0 rule-index true)))
+        body-start (if rule-index (inc rule-index) 0)
+        body (vec (render-rows body-start (count rows) false))
+        sections (cond-> []
+                   (seq header) (conj (hiccup :thead header))
+                   (seq body) (conj (hiccup :tbody body)))]
+    [[:div {:class "org-table-scroll"}
+      (hiccup :table sections)]]))
+
 (defn default-renderers []
   {:org-data (fn [ctx node path] (render-children ctx node path))
    :section (fn [ctx node path] (render-children ctx node path))
@@ -471,14 +499,15 @@
                                                  (render-children ctx node path))])
    :special-block special-block-renderer
    :horizontal-rule (fn [_ _ _] [[:hr]])
-   :table (fn [ctx node path]
-            [[:div {:class "org-table-scroll"}
-              (hiccup :table (render-children ctx node path))]])
+   :table table-renderer
    :table-row (fn [ctx node path]
                 (if (= "rule" (ast/value-name (:type (ast/props node))))
                   []
                   [(hiccup :tr (render-children ctx node path))]))
-   :table-cell (fn [ctx node path] [(hiccup :td (render-children ctx node path))])
+   :table-cell (fn [ctx node path]
+                 (let [tag (or (:table-cell-tag ctx) :td)
+                       attrs (if (= :th tag) {:scope "col"} {})]
+                   [(hiccup tag attrs (render-children ctx node path))]))
    :footnote-definition (fn [ctx node path]
                           [(hiccup :aside {:class "org-footnote"
                                           :data-footnote (:label (ast/props node))}
