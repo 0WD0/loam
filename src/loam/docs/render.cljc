@@ -195,7 +195,10 @@
                                             "org-latex-display"
                                             "org-latex-inline"))
                               :role "img"
-                              :aria-label source}
+                              :aria-label source
+                              :data-latex-source source
+                              :data-latex-display (if display? "true" "false")
+                              :title "Copying this formula yields its LaTeX source"}
                       (latex-wrapper-style preview display?)
                       (assoc :style (latex-wrapper-style preview display?))
                       (:sha256 preview)

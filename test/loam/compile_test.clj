@@ -138,6 +138,8 @@
     (is (= :ok (:status result)) (:diagnostics result))
     (is (false? (get-in result [:artifacts :manifest :build :unreleasable])))
     (is (str/includes? fragment "class=\"org-latex org-latex-inline\""))
+    (is (str/includes? fragment "data-latex-source=\"$x$\""))
+    (is (str/includes? fragment "data-latex-display=\"false\""))
     (is (str/includes? fragment "class=\"org-latex-svg\""))
     (is (str/includes? fragment "fill=\"currentColor\""))
     (is (str/includes? fragment "id=\"latex-abc123-g0\""))
